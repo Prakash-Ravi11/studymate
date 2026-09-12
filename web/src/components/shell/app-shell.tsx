@@ -6,20 +6,25 @@ import { Sidebar } from './sidebar';
 import { MobileNav } from './mobile-nav';
 import { CommandPalette } from './command-palette';
 import { QuickCapture } from './quick-capture';
+import { NotificationBell } from './notification-bell';
 import { Wordmark } from '@/components/logo';
 import type { Profile } from '@/lib/supabase/database.types';
+import type { DueReminder } from '@/lib/data/reminders';
 
 export function AppShell({
   profile,
   email,
   subjects,
+  dueReminders,
   children,
 }: {
   profile: Profile | null;
   email: string;
   subjects: { id: string; name: string; color: string }[];
+  dueReminders: DueReminder[];
   children: React.ReactNode;
 }) {
+  const timezone = profile?.timezone ?? 'UTC';
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [captureOpen, setCaptureOpen] = React.useState(false);
 
@@ -49,6 +54,8 @@ export function AppShell({
       <Sidebar
         profile={profile}
         email={email}
+        dueReminders={dueReminders}
+        timezone={timezone}
         onOpenSearch={() => setSearchOpen(true)}
         onOpenCapture={() => setCaptureOpen(true)}
       />
@@ -57,13 +64,16 @@ export function AppShell({
         {/* Mobile top bar: the sidebar is hidden, so brand + search live here. */}
         <header className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-line bg-surface/95 px-4 py-2.5 backdrop-blur lg:hidden">
           <Wordmark />
-          <button
-            onClick={() => setSearchOpen(true)}
-            aria-label="Search"
-            className="rounded-md p-2 text-content-secondary hover:bg-surface-sunken"
-          >
-            <Search className="size-4" />
-          </button>
+          <div className="flex items-center gap-0.5">
+            <NotificationBell initial={dueReminders} timezone={timezone} />
+            <button
+              onClick={() => setSearchOpen(true)}
+              aria-label="Search"
+              className="rounded-md p-2 text-content-secondary hover:bg-surface-sunken"
+            >
+              <Search className="size-4" />
+            </button>
+          </div>
         </header>
 
         {/* Bottom padding clears the mobile tab bar. */}
@@ -89,7 +99,7 @@ export function AppShell({
         open={captureOpen}
         onClose={() => setCaptureOpen(false)}
         subjects={subjects}
-        timezone={profile?.timezone ?? 'UTC'}
+        timezone={timezone}
       />
     </div>
   );

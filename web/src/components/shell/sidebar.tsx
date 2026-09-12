@@ -6,9 +6,11 @@ import { Search, Plus } from 'lucide-react';
 import { Wordmark } from '@/components/logo';
 import { UserMenu } from './user-menu';
 import { ThemeToggle } from './theme-toggle';
+import { NotificationBell } from './notification-bell';
 import { PLAN_NAV, LIBRARY_NAV, SETTINGS_NAV, CLASS_MODE_NAV, isActive, type NavItem } from '@/lib/nav';
 import { cn } from '@/lib/utils';
 import type { Profile } from '@/lib/supabase/database.types';
+import type { DueReminder } from '@/lib/data/reminders';
 
 function NavLink({ item, active }: { item: NavItem; active: boolean }) {
   const Icon = item.icon;
@@ -34,11 +36,15 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
 export function Sidebar({
   profile,
   email,
+  dueReminders,
+  timezone,
   onOpenSearch,
   onOpenCapture,
 }: {
   profile: Profile | null;
   email: string;
+  dueReminders: DueReminder[];
+  timezone: string;
   onOpenSearch: () => void;
   onOpenCapture: () => void;
 }) {
@@ -46,10 +52,11 @@ export function Sidebar({
 
   return (
     <aside className="hidden w-60 shrink-0 flex-col border-r border-line bg-surface lg:flex">
-      <div className="px-4 py-4">
+      <div className="flex items-center justify-between gap-2 py-3 pl-4 pr-2">
         <Link href="/home" className="w-fit rounded-md">
           <Wordmark />
         </Link>
+        <NotificationBell initial={dueReminders} timezone={timezone} />
       </div>
 
       <div className="space-y-1.5 px-3 pb-3">
