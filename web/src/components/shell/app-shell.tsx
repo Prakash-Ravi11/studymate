@@ -1,23 +1,27 @@
 'use client';
 
 import * as React from 'react';
-import { Search } from 'lucide-react';
+import { Search, Plus } from 'lucide-react';
 import { Sidebar } from './sidebar';
 import { MobileNav } from './mobile-nav';
 import { CommandPalette } from './command-palette';
+import { QuickCapture } from './quick-capture';
 import { Wordmark } from '@/components/logo';
 import type { Profile } from '@/lib/supabase/database.types';
 
 export function AppShell({
   profile,
   email,
+  subjects,
   children,
 }: {
   profile: Profile | null;
   email: string;
+  subjects: { id: string; name: string; color: string }[];
   children: React.ReactNode;
 }) {
   const [searchOpen, setSearchOpen] = React.useState(false);
+  const [captureOpen, setCaptureOpen] = React.useState(false);
 
   // Cmd/Ctrl-K opens search from anywhere (section 49).
   React.useEffect(() => {
@@ -25,6 +29,11 @@ export function AppShell({
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setSearchOpen((o) => !o);
+      }
+      // Cmd/Ctrl-J captures without leaving the page.
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'j') {
+        e.preventDefault();
+        setCaptureOpen((o) => !o);
       }
     };
     document.addEventListener('keydown', onKeyDown);
@@ -37,7 +46,12 @@ export function AppShell({
         Skip to content
       </a>
 
-      <Sidebar profile={profile} email={email} onOpenSearch={() => setSearchOpen(true)} />
+      <Sidebar
+        profile={profile}
+        email={email}
+        onOpenSearch={() => setSearchOpen(true)}
+        onOpenCapture={() => setCaptureOpen(true)}
+      />
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Mobile top bar: the sidebar is hidden, so brand + search live here. */}
@@ -58,8 +72,25 @@ export function AppShell({
         </main>
       </div>
 
+      {/* Mobile capture button: sits above the tab bar, always one tap away
+          (section 50). Hidden on desktop, where Cmd/Ctrl-J and the sidebar
+          button do the same job. */}
+      <button
+        onClick={() => setCaptureOpen(true)}
+        aria-label="Quick capture"
+        className="fixed bottom-[4.5rem] right-4 z-30 grid size-14 place-items-center rounded-full bg-primary text-primary-contrast shadow-lg transition-transform hover:scale-105 lg:hidden"
+      >
+        <Plus className="size-5" aria-hidden="true" />
+      </button>
+
       <MobileNav />
       <CommandPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <QuickCapture
+        open={captureOpen}
+        onClose={() => setCaptureOpen(false)}
+        subjects={subjects}
+        timezone={profile?.timezone ?? 'UTC'}
+      />
     </div>
   );
 }

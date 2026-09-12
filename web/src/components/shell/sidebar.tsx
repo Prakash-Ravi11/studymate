@@ -2,11 +2,11 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Search } from 'lucide-react';
+import { Search, Plus } from 'lucide-react';
 import { Wordmark } from '@/components/logo';
 import { UserMenu } from './user-menu';
 import { ThemeToggle } from './theme-toggle';
-import { PLAN_NAV, LIBRARY_NAV, SETTINGS_NAV, isActive, type NavItem } from '@/lib/nav';
+import { PLAN_NAV, LIBRARY_NAV, SETTINGS_NAV, CLASS_MODE_NAV, isActive, type NavItem } from '@/lib/nav';
 import { cn } from '@/lib/utils';
 import type { Profile } from '@/lib/supabase/database.types';
 
@@ -35,10 +35,12 @@ export function Sidebar({
   profile,
   email,
   onOpenSearch,
+  onOpenCapture,
 }: {
   profile: Profile | null;
   email: string;
   onOpenSearch: () => void;
+  onOpenCapture: () => void;
 }) {
   const pathname = usePathname();
 
@@ -50,7 +52,17 @@ export function Sidebar({
         </Link>
       </div>
 
-      <div className="px-3 pb-3">
+      <div className="space-y-1.5 px-3 pb-3">
+        <button
+          onClick={onOpenCapture}
+          className="flex w-full items-center gap-2 rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-contrast hover:bg-primary-hover"
+        >
+          <Plus className="size-3.5" aria-hidden="true" />
+          <span className="flex-1 text-left">Capture</span>
+          <kbd className="rounded border border-white/25 px-1 py-px font-sans text-[10px] opacity-80">
+            ⌘J
+          </kbd>
+        </button>
         <button
           onClick={onOpenSearch}
           className="flex w-full items-center gap-2 rounded-md border border-line bg-canvas px-2.5 py-1.5 text-xs text-content-tertiary hover:border-line-strong"
@@ -81,6 +93,7 @@ export function Sidebar({
       </nav>
 
       <div className="space-y-2 border-t border-line p-3">
+        <NavLink item={CLASS_MODE_NAV} active={isActive(pathname, CLASS_MODE_NAV.href)} />
         <NavLink item={SETTINGS_NAV} active={isActive(pathname, SETTINGS_NAV.href)} />
         <div className="flex items-center justify-between gap-2 px-1">
           <span className="text-2xs text-content-tertiary">Theme</span>

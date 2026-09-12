@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import * as React from 'react';
 import { MoreHorizontal, X } from 'lucide-react';
-import { MOBILE_NAV, LIBRARY_NAV, SETTINGS_NAV, isActive } from '@/lib/nav';
+import { MOBILE_NAV, LIBRARY_NAV, SETTINGS_NAV, CLASS_MODE_NAV, isActive } from '@/lib/nav';
 import { ThemeToggle } from './theme-toggle';
 import { signOut } from '@/lib/actions/auth';
 import { cn } from '@/lib/utils';
@@ -43,7 +43,7 @@ export function MobileNav() {
               </button>
             </div>
             <nav className="px-2 pb-2" aria-label="More destinations">
-              {[...LIBRARY_NAV, SETTINGS_NAV].map((item) => {
+              {[CLASS_MODE_NAV, ...LIBRARY_NAV, SETTINGS_NAV].map((item) => {
                 const Icon = item.icon;
                 const active = isActive(pathname, item.href);
                 return (

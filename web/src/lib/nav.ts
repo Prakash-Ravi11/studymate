@@ -1,6 +1,6 @@
 import {
   Home, BookOpen, CheckSquare, CalendarDays,
-  FileText, FolderOpen, Mic, Settings,
+  FileText, FolderOpen, Mic, Settings, GraduationCap,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -25,6 +25,13 @@ export const LIBRARY_NAV: NavItem[] = [
 ];
 
 export const SETTINGS_NAV: NavItem = { href: '/settings', label: 'Settings', icon: Settings };
+
+/** Distraction-free capture screen; reachable but never in the way. */
+export const CLASS_MODE_NAV: NavItem = {
+  href: '/class',
+  label: 'Class mode',
+  icon: GraduationCap,
+};
 
 /** The four that earn a slot in the mobile tab bar; the rest live under More. */
 export const MOBILE_NAV: NavItem[] = [
