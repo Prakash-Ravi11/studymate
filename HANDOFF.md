@@ -261,6 +261,24 @@ psql "$DATABASE_URL" -f supabase/tests/reminder_delivery_test.sql
 8. Standalone node scripts need `--env-file=.env.local`; they do not inherit
    Next's env loading.
 
+9. **Every signed-in route is dynamic, so each one needs its own `loading.tsx`.**
+   Next only prefetches a dynamic route *down to the nearest `loading` boundary*
+   (`node_modules/next/dist/docs/01-app/03-api-reference/02-components/link.md`,
+   the `prefetch` section). With no boundary anywhere, `<Link prefetch>` had
+   nothing to cache and a tap left the **previous page frozen on screen** until
+   the server render landed — which reads as the app being slow even when server
+   compute is a median 27ms. There is now one `loading.tsx` per navigable route,
+   built from `components/ui/page-skeleton.tsx`. Add one with any new route.
+
+10. **Auth is a network round trip, so `getCurrentUser` must stay `cache()`d.**
+    `getUser()` revalidates the token against Supabase. The shell's
+    `requireUser`, `getProfile` and the page's own guard each asked for it, so
+    every navigation made three identical auth calls to Mumbai. `cache()` from
+    `react` collapses them to one **per request** — it does not weaken the
+    check, and nothing is shared between requests or users. `getSubject` and
+    `getNote` are cached for the same reason: `generateMetadata` and the page
+    body both need them.
+
 ---
 
 ## 7. What remains
@@ -278,7 +296,13 @@ psql "$DATABASE_URL" -f supabase/tests/reminder_delivery_test.sql
 
 **Done since the last handoff:** README rewritten for the rebuild (it described
 the Expo app), in-app reminder delivery built, outbound worker built and
-verified 22/22 at the database level.
+verified 22/22 at the database level. The app is **now deployed and in real
+use** (Vercel, root directory `web`) — which surfaced and fixed two things the
+sandbox could never have shown: constants exported from a `'use server'` module
+became opaque server references and crashed at render (`736fe4b`), and
+navigation felt slow. The latter was three separate causes, all now fixed:
+no `loading.tsx` anywhere, functions running in `iad1` while the database is in
+`ap-south-1`, and three duplicate auth round trips per page.
 
 Honest status against the prompt's Definition of Done: schema, RLS, storage,
 auth, subjects, tasks, notes, resources, voice, transcription, calendar, search,

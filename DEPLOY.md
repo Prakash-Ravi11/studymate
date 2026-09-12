@@ -87,6 +87,22 @@ connection.
 Vercel gives you HTTPS, so voice notes work there. Everything else — dashboard,
 tasks, notes, search, uploads — is fine either way.
 
+## Why the functions are pinned to Mumbai
+
+`web/vercel.json` sets `"regions": ["bom1"]`.
+
+Supabase project `xrhttgjwwxlfupofpvns` lives in **ap-south-1 (Mumbai)**, and
+every signed-in page makes several serial calls to it — verify the session,
+read the profile, then the page's own queries. A function in Washington
+(`iad1`, Vercel's default) pays a trans-continental round trip on each one.
+
+The runtime log from the first real session showed the split plainly: 51
+requests served from `bom1` and 49 from `iad1`. Pinning the region puts the
+compute next to the database, which is where the latency actually was.
+
+If the database ever moves region, move this with it — the two belong together.
+JSON takes no comments, which is why the reasoning lives here.
+
 ## Known behaviour on a deployed instance
 
 - **Uploads and recordings go to real Supabase Storage**, into a private

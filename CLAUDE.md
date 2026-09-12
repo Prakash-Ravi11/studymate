@@ -66,6 +66,15 @@ psql "$DATABASE_URL" -f supabase/tests/rls_test.sql   # expect 14 PASS
 - **Pages call `requireUser()` / `requireOnboardedUser()`** even though the proxy
   already redirects. Routing is not an authorisation boundary; RLS backstops both.
 - **Business rules go in `src/lib/actions/*`**, reads in `src/lib/data/*`.
+- **Every new route needs a `loading.tsx`.** Each signed-in route is dynamic, and
+  Next only prefetches a dynamic route down to its nearest `loading` boundary —
+  without one, tapping a link leaves the old page frozen until the server render
+  lands. Build it from `components/ui/page-skeleton.tsx` and mirror the real
+  page's container width and layout.
+- **Per-request reads that more than one caller needs go through React `cache()`**
+  (`getCurrentUser`, `getProfile`, `listSubjectOptions`, `getSubject`, `getNote`).
+  The shell, the page and `generateMetadata` all run in one request; uncached,
+  each one is another round trip to Mumbai.
 - **RLS is the security boundary.** Any new table needs policies in a migration
   plus coverage in `supabase/tests/rls_test.sql`. New `public` functions need
   EXECUTE revoked from `anon` unless deliberately public.

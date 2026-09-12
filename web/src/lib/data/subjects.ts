@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { createClient } from '@/lib/supabase/server';
 import type { SubjectOverview, Subject } from '@/lib/supabase/database.types';
 
@@ -18,8 +19,16 @@ export async function listSubjects(
   return data ?? [];
 }
 
-/** Minimal list for pickers -- no counts needed. */
-export async function listSubjectOptions(): Promise<Pick<Subject, 'id' | 'name' | 'color'>[]> {
+/**
+ * Minimal list for pickers -- no counts needed.
+ *
+ * Cached per request: the app shell loads it for Quick Capture on every page,
+ * and Tasks, Resources, Voice and Class Mode each ask for it again. Without
+ * this that is two identical round trips per navigation.
+ */
+export const listSubjectOptions = cache(async (): Promise<
+  Pick<Subject, 'id' | 'name' | 'color'>[]
+> => {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('subjects')
@@ -32,9 +41,10 @@ export async function listSubjectOptions(): Promise<Pick<Subject, 'id' | 'name' 
     return [];
   }
   return data ?? [];
-}
+});
 
-export async function getSubject(id: string): Promise<SubjectOverview | null> {
+/** Cached per request: generateMetadata and the page itself both need it. */
+export const getSubject = cache(async (id: string): Promise<SubjectOverview | null> => {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('subject_overview')
@@ -47,4 +57,4 @@ export async function getSubject(id: string): Promise<SubjectOverview | null> {
     return null;
   }
   return data;
-}
+});

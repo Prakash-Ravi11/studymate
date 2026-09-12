@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { createClient } from '@/lib/supabase/server';
 import type { Note } from '@/lib/supabase/database.types';
 
@@ -30,7 +31,8 @@ export async function listNotes(options: { subjectId?: string; archived?: boolea
   return (data ?? []) as NoteListItem[];
 }
 
-export async function getNote(id: string): Promise<Note | null> {
+/** Cached per request: generateMetadata needs the title, the page needs the body. */
+export const getNote = cache(async (id: string): Promise<Note | null> => {
   const supabase = await createClient();
   const { data, error } = await supabase.from('notes').select('*').eq('id', id).maybeSingle();
   if (error) {
@@ -38,4 +40,4 @@ export async function getNote(id: string): Promise<Note | null> {
     return null;
   }
   return data;
-}
+});
