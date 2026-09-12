@@ -129,6 +129,32 @@ fault:
 git ls-tree --name-only <commit>      # expect a `web` entry
 ```
 
+### Build finishes in seconds and still 404s, on the right branch
+
+If Source names the right branch and commit, Root Directory is `web`, the status
+is Ready, and the build took well under a minute, the Next.js build did not run.
+
+The usual cause is a **stale Framework Preset**. Vercel detects the framework
+once, when the project is created. A project first created with Root Directory
+at the repository root finds no Next.js app and is set to preset `Other`.
+Changing Root Directory afterwards does **not** re-run detection, so the preset
+stays `Other`: no real build command, nothing served, 404 on every path, and the
+deployment still reports Ready because nothing failed.
+
+`web/vercel.json` now pins this in the repository:
+
+```json
+{ "framework": "nextjs", "buildCommand": "next build" }
+```
+
+vercel.json overrides the dashboard preset, so the build no longer depends on
+project settings that silently persist from whenever the project was first
+created. If the dashboard and this file disagree, this file wins.
+
+A genuine Next.js build logs `Running "npm run build"`, `> next build` and
+`Creating an optimized production build`. If the logs show none of that, the
+preset was the problem.
+
 ### "No deployments found for <branch>. Deploy the branch, then retry."
 
 Vercel only builds a branch when it receives a push *after* the repository was
