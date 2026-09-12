@@ -518,7 +518,34 @@ export type Database = {
         ];
       };
     };
-    Views: Record<never, never>;
+    Views: {
+      /** Read-only: subjects joined to their counts (migration 0011). */
+      subject_overview: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          code: string | null;
+          description: string | null;
+          color: string;
+          icon: string | null;
+          instructor: string | null;
+          semester: number | null;
+          archived_at: string | null;
+          created_at: string;
+          updated_at: string;
+          open_tasks: number;
+          overdue_tasks: number;
+          done_tasks: number;
+          total_tasks: number;
+          note_count: number;
+          resource_count: number;
+          voice_count: number;
+          last_activity_at: string;
+        };
+        Relationships: [];
+      };
+    };
     Functions: {
       search_all: {
         Args: { q: string; p_types?: string[]; p_subject_id?: string; p_limit?: number };
@@ -554,6 +581,7 @@ export type Database = {
 type PublicSchema = Database['public'];
 
 export type Tables<T extends keyof PublicSchema['Tables']> = PublicSchema['Tables'][T]['Row'];
+export type Views<T extends keyof PublicSchema['Views']> = PublicSchema['Views'][T]['Row'];
 export type TablesInsert<T extends keyof PublicSchema['Tables']> = PublicSchema['Tables'][T]['Insert'];
 export type TablesUpdate<T extends keyof PublicSchema['Tables']> = PublicSchema['Tables'][T]['Update'];
 export type Enums<T extends keyof PublicSchema['Enums']> = PublicSchema['Enums'][T];
@@ -567,6 +595,7 @@ export type VoiceNote = Tables<'voice_notes'>;
 export type Task = Tables<'tasks'>;
 export type Reminder = Tables<'reminders'>;
 export type Activity = Tables<'activity'>;
+export type SubjectOverview = Views<'subject_overview'>;
 
 export type TaskStatus = Enums<'task_status'>;
 export type TaskPriority = Enums<'task_priority'>;
