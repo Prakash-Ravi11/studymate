@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { headers } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
+import { env } from '@/lib/env';
 
 export type AuthState = { error: string | null };
 
@@ -61,7 +62,9 @@ export async function signUp(_prev: AuthState, formData: FormData): Promise<Auth
   if (!email) return { error: 'Enter your email address.' };
   if (password.length < 8) return { error: 'Choose a password of at least 8 characters.' };
 
-  const origin = (await headers()).get('origin') ?? process.env.NEXT_PUBLIC_SITE_URL;
+  // Falls back to the resolved site URL, which knows about Vercel's host vars;
+  // reading the raw env var here would send emailed links to localhost.
+  const origin = (await headers()).get('origin') ?? env.siteUrl;
   const supabase = await createClient();
 
   const { data, error } = await supabase.auth.signUp({
@@ -101,7 +104,9 @@ export async function requestPasswordReset(
   const email = String(formData.get('email') ?? '').trim().toLowerCase();
   if (!email) return { error: 'Enter your email address.', sent: false };
 
-  const origin = (await headers()).get('origin') ?? process.env.NEXT_PUBLIC_SITE_URL;
+  // Falls back to the resolved site URL, which knows about Vercel's host vars;
+  // reading the raw env var here would send emailed links to localhost.
+  const origin = (await headers()).get('origin') ?? env.siteUrl;
   const supabase = await createClient();
 
   const { error } = await supabase.auth.resetPasswordForEmail(email, {

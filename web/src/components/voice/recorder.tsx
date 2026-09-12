@@ -34,7 +34,7 @@ export function VoiceRecorder({
   const toast = useToast();
 
   const [phase, setPhase] = React.useState<Phase>('idle');
-  const [supported, setSupported] = React.useState<boolean | null>(null);
+  const [supported, setSupported] = React.useState<boolean | 'insecure' | null>(null);
   const [permissionError, setPermissionError] = React.useState<string | null>(null);
   const [elapsed, setElapsed] = React.useState(0);
   const [blob, setBlob] = React.useState<Blob | null>(null);
@@ -50,7 +50,17 @@ export function VoiceRecorder({
 
   // Feature-detect once on the client. Reporting "unsupported" up front is the
   // honest alternative to a Record button that silently does nothing.
+  //
+  // An insecure origin is separated out because it looks identical to a missing
+  // API -- browsers simply do not expose navigator.mediaDevices outside a secure
+  // context. That is the usual cause when testing on a phone over a LAN address
+  // like http://192.168.1.5:3000, and telling someone their browser is too old
+  // would send them debugging entirely the wrong thing.
   React.useEffect(() => {
+    if (typeof window !== 'undefined' && !window.isSecureContext) {
+      setSupported('insecure');
+      return;
+    }
     const ok =
       typeof navigator !== 'undefined' &&
       Boolean(navigator.mediaDevices?.getUserMedia) &&
@@ -215,6 +225,24 @@ export function VoiceRecorder({
         router.refresh();
       });
     }
+  }
+
+  if (supported === 'insecure') {
+    return (
+      <div className="rounded-xl border border-line bg-surface p-5 text-center">
+        <MicOff className="mx-auto size-5 text-content-tertiary" aria-hidden="true" />
+        <p className="mt-2 text-sm font-medium text-content">
+          Recording needs a secure connection
+        </p>
+        <p className="mt-1 text-xs leading-relaxed text-content-secondary">
+          Browsers only grant microphone access over HTTPS, or on localhost. You are on{' '}
+          <code className="rounded bg-surface-sunken px-1">
+            {typeof window !== 'undefined' ? window.location.origin : ''}
+          </code>
+          . Open StudyMate over HTTPS and recording will work. Everything else works here.
+        </p>
+      </div>
+    );
   }
 
   if (supported === false) {

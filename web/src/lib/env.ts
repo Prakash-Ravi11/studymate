@@ -15,13 +15,43 @@ function required(name: string, value: string | undefined): string {
   return value;
 }
 
+/**
+ * The public origin this deployment is reachable at.
+ *
+ * Used to build the links inside confirmation and password-reset emails, so
+ * getting it wrong sends the student to a host that does not serve the app.
+ *
+ * Resolution order:
+ *   1. NEXT_PUBLIC_SITE_URL      -- explicit wins, and is the only way to pin a
+ *                                   custom domain.
+ *   2. VERCEL_PROJECT_PRODUCTION_URL -- stable production host on Vercel.
+ *   3. VERCEL_URL                -- per-deployment host, so preview deploys
+ *                                   link back to themselves rather than to
+ *                                   production.
+ *   4. localhost                 -- development.
+ *
+ * Without 2 and 3 a Vercel deployment silently falls back to localhost and
+ * every emailed link points at the student's own machine.
+ */
+function resolveSiteUrl(): string {
+  const explicit = process.env.NEXT_PUBLIC_SITE_URL?.trim();
+  if (explicit) return explicit.replace(/\/$/, '');
+
+  // Vercel supplies these without a scheme.
+  const vercelHost =
+    process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim() || process.env.VERCEL_URL?.trim();
+  if (vercelHost) return `https://${vercelHost}`;
+
+  return 'http://localhost:3000';
+}
+
 export const env = {
   supabaseUrl: required('NEXT_PUBLIC_SUPABASE_URL', process.env.NEXT_PUBLIC_SUPABASE_URL),
   supabaseKey: required(
     'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
   ),
-  siteUrl: process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000',
+  siteUrl: resolveSiteUrl(),
 };
 
 /**
