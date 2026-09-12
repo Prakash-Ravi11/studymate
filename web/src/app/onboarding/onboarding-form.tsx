@@ -5,9 +5,9 @@ import { AlertCircle } from 'lucide-react';
 import {
   completeOnboarding,
   skipOnboarding,
-  SUBJECT_COLORS,
   type OnboardingState,
 } from '@/lib/actions/onboarding';
+import { SUBJECT_COLORS } from '@/lib/constants';
 import { Field, Input } from '@/components/ui/field';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';

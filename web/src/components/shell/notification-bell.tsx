@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
+import { SNOOZE_OPTIONS } from '@/lib/constants';
 import { useRouter } from 'next/navigation';
 import { Bell, Check, Clock } from 'lucide-react';
 import {
@@ -9,7 +10,6 @@ import {
   dismissReminder,
   dismissAllReminders,
   snoozeReminder,
-  SNOOZE_OPTIONS,
 } from '@/lib/actions/reminders';
 import { useToast } from '@/components/ui/toast';
 import { formatDue, relativeTime } from '@/lib/dates';

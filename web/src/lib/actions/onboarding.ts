@@ -7,12 +7,6 @@ import { requireUser } from '@/lib/data/guards';
 
 export type OnboardingState = { error: string | null };
 
-/** Palette offered for the first subject; matches the design system accents. */
-export const SUBJECT_COLORS = [
-  '#4f46e5', '#7c3aed', '#0891b2', '#059669',
-  '#d97706', '#dc2626', '#db2777', '#475569',
-] as const;
-
 export async function completeOnboarding(
   _prev: OnboardingState,
   formData: FormData,

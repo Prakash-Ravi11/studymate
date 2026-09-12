@@ -7,7 +7,7 @@ import { Field, Input, Textarea } from '@/components/ui/field';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { createSubject, updateSubject } from '@/lib/actions/subjects';
-import { SUBJECT_COLORS } from '@/lib/actions/onboarding';
+import { SUBJECT_COLORS } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import type { SubjectOverview } from '@/lib/supabase/database.types';
 

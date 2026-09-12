@@ -6,14 +6,6 @@ import { requireUser } from '@/lib/data/guards';
 import { listDueReminders, type DueReminder } from '@/lib/data/reminders';
 import type { ActionResult } from './tasks';
 
-/** Snooze choices offered in the notification tray, in minutes. */
-export const SNOOZE_OPTIONS = [
-  { minutes: 10, label: '10 minutes' },
-  { minutes: 60, label: '1 hour' },
-  { minutes: 60 * 3, label: '3 hours' },
-  { minutes: 60 * 24, label: 'Tomorrow' },
-] as const;
-
 /**
  * Re-read the due list from a client on a timer.
  *
