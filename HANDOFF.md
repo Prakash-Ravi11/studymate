@@ -43,8 +43,9 @@ was attempted.
 Consequences:
 
 - The Supabase **MCP tools work** — they use a different allowed path. That is
-  how migrations were applied and the RLS tests actually run. Database work is
-  genuinely verified.
+  how migrations were applied and the RLS tests first ran.
+- The **database layer is independently verified offline** by
+  `supabase/tests/run_local.sh`, which needs no network at all (§4).
 - The **app cannot reach Supabase**. Sign-in, onboarding, dashboard, search,
   uploads, recording — none of it can be exercised at runtime from here.
 - `web/e2e/smoke.mjs` probes reachability first and marks those checks
@@ -141,7 +142,21 @@ Disposable. **Delete it before this database is used for real.**
   claimed, the attempt ceiling holding, and neither function reachable from
   `anon` or `authenticated`.
 
+- **Migrations apply cleanly from scratch — verified.**
+  `supabase/tests/run_local.sh` spins up a throwaway PostgreSQL cluster, applies
+  `local_stub.sql` (minimal stand-ins for `auth.uid()`, `auth.users`,
+  `storage.foldername()`, `storage.objects`, `storage.buckets` and the
+  anon/authenticated/service_role roles), applies all 12 migrations **in order**,
+  and runs both suites. **36/36 passing.**
+
+  This proves something applying migrations to a live project does not: that a
+  fresh clone or a CI run gets a working database. Needs only a local PostgreSQL
+  install — no Docker, no network, no Supabase project.
+
 ```bash
+supabase/tests/run_local.sh                  # clean cluster, 12 migrations, 36 checks
+
+# or against an existing database
 psql "$DATABASE_URL" -f supabase/tests/rls_test.sql
 psql "$DATABASE_URL" -f supabase/tests/reminder_delivery_test.sql
 ```
