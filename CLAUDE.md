@@ -2,9 +2,84 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Repository layout
+> **Read [HANDOFF.md](./HANDOFF.md) first.** It carries the current project
+> state, the active blocker, Supabase details, decisions already made, and the
+> gotchas that cost real time to find. This file covers layout and commands.
 
-Two independent projects with no root-level build file or workspace config. Always `cd` into one of them first.
+## Current architecture
+
+StudyMate is being rebuilt as a **Next.js web app on Supabase**. Three trees:
+
+- `web/` — **the product.** Next.js 16 (App Router), React 19, TypeScript,
+  Tailwind 4, Supabase for auth/database/storage.
+- `supabase/` — `migrations/` (0001-0011, applied to the live project) and
+  `tests/rls_test.sql` (cross-user penetration test, must stay 14/14).
+- `frontend/`, `backend/` — **legacy.** The original Expo app and Spring Boot
+  API. Superseded by `web/`, kept until the rebuild is runtime-verified. Do not
+  add features here.
+
+### Two things that will bite you
+
+1. **Next.js 16 renamed `middleware` to `proxy`.** Auth session refresh and
+   route protection live in `web/src/proxy.ts`. Training-data memory is wrong
+   about this — read `node_modules/next/dist/docs/` before writing Next code.
+2. **`web/src/lib/supabase/database.types.ts` must keep each table's
+   `Relationships` key.** Without it the Supabase client's `Schema` generic
+   silently collapses to `never` and every query loses its types while still
+   compiling. After regenerating, confirm a deliberate type error is caught.
+
+## Commands
+
+### Web app (`cd web`)
+
+```bash
+npm install
+npm run dev                 # http://localhost:3000
+npm run build               # production build
+npx tsc --noEmit            # typecheck
+npm run lint
+
+node --env-file=.env.local e2e/smoke.mjs   # end-to-end, real Chromium
+```
+
+The E2E suite probes Supabase first and marks auth-dependent checks **SKIPPED**
+when it is unreachable — skipped is not passed. Chromium lives at
+`/opt/pw-browsers/chromium-1194/chrome-linux/chrome`; never run
+`playwright install`.
+
+Copy `web/.env.example` to `web/.env.local` and fill it in. Standalone node
+scripts need `--env-file=.env.local`; they do not inherit Next's env loading.
+
+### Database
+
+```bash
+psql "$DATABASE_URL" -f supabase/tests/rls_test.sql   # expect 14 PASS
+```
+
+## Conventions in `web/`
+
+- **Never hardcode a colour.** Use the semantic tokens in `src/app/globals.css`
+  (`bg-surface`, `text-content-secondary`, `border-line`, ...). Dark mode is
+  class-based so the user's choice persists.
+- **Auth checks use `getUser()`, never `getSession()`** — the latter trusts the
+  cookie without revalidating it.
+- **Pages call `requireUser()` / `requireOnboardedUser()`** even though the proxy
+  already redirects. Routing is not an authorisation boundary; RLS backstops both.
+- **Business rules go in `src/lib/actions/*`**, reads in `src/lib/data/*`.
+- **RLS is the security boundary.** Any new table needs policies in a migration
+  plus coverage in `supabase/tests/rls_test.sql`. New `public` functions need
+  EXECUTE revoked from `anon` unless deliberately public.
+- **No fake functionality.** If something cannot be finished, say so rather than
+  stubbing it to look complete.
+
+---
+
+# Legacy trees (`frontend/`, `backend/`)
+
+Retained for reference until the rebuild is verified. The notes below describe
+them as they stand.
+
+## Repository layout
 
 - `frontend/` — React Native app on Expo (JavaScript, no TypeScript)
 - `backend/` — Spring Boot 2.7 REST API built with Maven
