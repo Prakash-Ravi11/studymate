@@ -129,6 +129,38 @@ fault:
 git ls-tree --name-only <commit>      # expect a `web` entry
 ```
 
+### "No deployments found for <branch>. Deploy the branch, then retry."
+
+Vercel only builds a branch when it receives a push *after* the repository was
+connected. Connecting the repo does not retroactively build existing branches,
+so a branch whose last commit predates the connection has no deployment and no
+preview URL.
+
+Push any commit to the branch and Vercel builds it. There is nothing to fix in
+the project settings.
+
+### Testing an unmerged branch without touching production
+
+Every branch push gets its own preview deployment at a stable URL:
+
+```
+<project>-git-<branch>-<scope>.vercel.app
+```
+
+Slashes in the branch name become hyphens, so `claude/fervent-mendel-w123jn`
+under project `studymate` in scope `zesus` is:
+
+```
+studymate-git-claude-fervent-mendel-w123jn-zesus.vercel.app
+```
+
+That URL always points at the branch tip and is served over HTTPS, which is what
+microphone recording needs. Production can stay on `main` — no merge and no
+production-branch change is required simply to try the app on a phone.
+
+**Root Directory still has to be `web`.** A preview deployment built from the
+repository root 404s exactly like a production one.
+
 ### Preview URLs instead of a stable one
 
 Vercel only treats the **production branch** as production. While the rebuild is
