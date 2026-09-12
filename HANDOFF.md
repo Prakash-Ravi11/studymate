@@ -87,7 +87,7 @@ Disposable. **Delete it before this database is used for real.**
 
 ## 4. Database — fully applied and verified
 
-11 migrations in `supabase/migrations/`, applied to the live project.
+12 migrations in `supabase/migrations/`, applied to the live project.
 
 **Tables:** `profiles`, `subjects`, `resources`, `notes`, `note_attachments`,
 `voice_notes`, `tasks`, `task_attachments`, `reminders`, `activity`, plus a
@@ -121,8 +121,11 @@ Disposable. **Delete it before this database is used for real.**
 
 ### Security status
 
-- **Supabase security advisors: zero findings.**
-  They caught a real one: `handle_new_user()` was a `SECURITY DEFINER` function
+- **Supabase security advisors: one WARN, no schema findings.** The warning is
+  `auth_leaked_password_protection` — a project *setting*, not code: Supabase can
+  check new passwords against HaveIBeenPwned and the toggle is off. Enable it in
+  Dashboard → Authentication → Policies. Nothing in the schema is flagged.
+  The advisors previously caught a real one: `handle_new_user()` was a `SECURITY DEFINER` function
   callable by `anon` via `/rest/v1/rpc/handle_new_user`, because PostgREST
   exposes every `public` function and Postgres grants EXECUTE to PUBLIC by
   default. Migration `0010` revokes EXECUTE on all trigger functions.
@@ -131,8 +134,16 @@ Disposable. **Delete it before this database is used for real.**
   another user, rewriting `user_id` to steal a row, and reaching content through
   global search. It raises an exception on any failure so CI can gate on it.
 
+- **`supabase/tests/reminder_delivery_test.sql` — 22/22 passing.** The
+  claim/complete contract: a due reminder leased exactly once, a warm lease
+  blocking a second worker and an expired one not, `in_app` rows left for the
+  app, reminders on finished tasks and reminders switched off in Settings never
+  claimed, the attempt ceiling holding, and neither function reachable from
+  `anon` or `authenticated`.
+
 ```bash
 psql "$DATABASE_URL" -f supabase/tests/rls_test.sql
+psql "$DATABASE_URL" -f supabase/tests/reminder_delivery_test.sql
 ```
 
 ---
@@ -144,10 +155,11 @@ psql "$DATABASE_URL" -f supabase/tests/rls_test.sql
 **Routes:** `/` (landing), `/login`, `/signup`, `/forgot-password`,
 `/reset-password`, `/auth/callback`, `/onboarding`, `/home`, `/subjects`,
 `/subjects/[id]`, `/tasks`, `/calendar`, `/notes`, `/notes/[id]`, `/resources`,
-`/voice`, `/class` (Class Mode), `/settings`.
+`/voice`, `/class` (Class Mode), `/settings`, plus
+`POST /api/reminders/deliver` (the reminder worker's cron endpoint).
 
 **Server actions:** `auth`, `onboarding`, `profile`, `subjects`, `tasks`,
-`notes`, `resources`, `voice`, `search`.
+`notes`, `resources`, `voice`, `search`, `reminders`.
 
 **Notable implementation points:**
 
@@ -178,6 +190,15 @@ psql "$DATABASE_URL" -f supabase/tests/rls_test.sql
   Whisper implemented, swappable. **Opt-in via env.** With nothing configured,
   recording/storage/playback all still work and notes are marked `unsupported`
   rather than implying a transcript is coming.
+- **Reminder delivery** splits by channel, deliberately. `in_app` is delivered
+  *by being read* — `lib/data/reminders.ts` queries reminders whose instant has
+  passed and the tray renders them, so it needs no worker, no cron and no
+  configuration. `email` is pushed by the worker at
+  `POST /api/reminders/deliver`. `push` is **not built** and the worker says so
+  rather than marking such reminders sent. Claiming is lease-based, so
+  overlapping runs are safe and a dead worker strands nothing; an unconfigured
+  channel is *released* (lease and attempt handed back) rather than failed, so a
+  missing API key never walks a good reminder to `failed`.
 - **Timezone**: captured from the browser at onboarding into `profiles.timezone`.
   All date boundaries go through `TZDate` (`src/lib/dates.ts`) so "today" and
   "tomorrow morning" mean the student's, not the server's.
@@ -210,7 +231,19 @@ psql "$DATABASE_URL" -f supabase/tests/rls_test.sql
 5. **Playwright Chromium** is at `/opt/pw-browsers/chromium-1194/chrome-linux/chrome`
    (not `.../chromium/...`). Never run `playwright install`.
 
-6. Standalone node scripts need `--env-file=.env.local`; they do not inherit
+6. **`task_status` has no `'todo'`.** The enum is
+   `inbox | planned | in_progress | completed | cancelled`, and the *open* set is
+   the first three — `OPEN_STATUSES` in `web/src/lib/data/dashboard.ts`. A
+   plpgsql body referencing a non-existent enum label creates fine and raises at
+   run time; the reminder-delivery test caught exactly that. Share
+   `OPEN_STATUSES` and type the column rather than retyping the list.
+
+7. **The proxy gates `/api` too.** A scheduler sends no cookies, so any endpoint
+   a cron calls must be listed in `SELF_AUTHENTICATED_ROUTES` in
+   `web/src/proxy.ts` or every run is redirected to `/login` and silently does
+   nothing. The exemption removes the redirect, not the endpoint's own auth.
+
+8. Standalone node scripts need `--env-file=.env.local`; they do not inherit
    Next's env loading.
 
 ---
@@ -219,19 +252,25 @@ psql "$DATABASE_URL" -f supabase/tests/rls_test.sql
 
 | # | Item | Notes |
 |---|---|---|
-| 1 | **Runtime verification** | Blocked by §2. The single highest-value remaining item — everything below is lower confidence until this runs. |
-| 2 | **README** | Still describes the old Expo + Spring Boot app. Needs full rewrite: architecture, Supabase setup, migrations, storage, env vars, local dev, deployment, testing, limitations. |
-| 3 | **Reminder delivery** | Schema, scheduling and the channel abstraction exist. No worker actually *sends* anything yet — reminders are stored and queryable but nothing fires. Must not be described as working. |
+| 1 | **Runtime verification** | Blocked by §2. The single highest-value remaining item — everything else is lower confidence until this runs. |
+| 2 | **Web push delivery** | Needs VAPID keys, a service worker and a `push_subscriptions` table. The worker reports the channel unconfigured today; the UI does not offer it. |
+| 3 | **Email delivery, end to end** | Built (Resend, behind `EMAIL_PROVIDER`) and type-checked, but **no real call to a provider has ever been made** from here. |
 | 4 | **Final UI/UX polish pass** | Prompt §61. Not yet done systematically. |
 | 5 | **Retire `frontend/` and `backend/`** | Propose after §1 passes. |
 | 6 | **Recurring tasks** | `repeat_rule` (RRULE) is stored; no expansion logic yet. |
 | 7 | **Delete test fixture** | `e2e@studymate.test` before production use. |
+| 8 | **Enable leaked-password protection** | Dashboard toggle; the only open advisor warning. |
+
+**Done since the last handoff:** README rewritten for the rebuild (it described
+the Expo app), in-app reminder delivery built, outbound worker built and
+verified 22/22 at the database level.
 
 Honest status against the prompt's Definition of Done: schema, RLS, storage,
 auth, subjects, tasks, notes, resources, voice, transcription, calendar, search,
 dashboard, quick capture, class mode, settings and dark mode are **built and
-type-checked**; they are **not runtime-verified**. Reminder *delivery* is not
-built. The README is not done.
+type-checked**; they are **not runtime-verified**. In-app reminder delivery is
+built; email delivery is built but has never made a real provider call; web push
+is **not built**. The README is done.
 
 ---
 
@@ -252,7 +291,8 @@ node --env-file=.env.local e2e/smoke.mjs
 #   Screenshots land in web/e2e/screenshots/ (gitignored).
 
 # Database
-psql "$DATABASE_URL" -f supabase/tests/rls_test.sql     # must print 14 PASS
+psql "$DATABASE_URL" -f supabase/tests/rls_test.sql               # 14 PASS
+psql "$DATABASE_URL" -f supabase/tests/reminder_delivery_test.sql # 22 PASS
 npx supabase gen types typescript --project-id xrhttgjwwxlfupofpvns \
   > web/src/lib/supabase/database.types.ts              # then re-check gotcha #2
 ```
