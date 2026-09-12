@@ -26,7 +26,17 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full`}>
+    <html
+      lang="en"
+      className={`${geistSans.variable} ${geistMono.variable} h-full`}
+      // themeScript below stamps the `dark` class on this element before React
+      // hydrates, so the server's class attribute deliberately does not match
+      // the client's. Without this, every visitor whose resolved theme is dark
+      // -- including everyone on the default "system" setting with a dark OS --
+      // gets a hydration mismatch error. Scoped to this element's own
+      // attributes; it does not silence mismatches anywhere else in the tree.
+      suppressHydrationWarning
+    >
       <head>
         {/* Blocking, pre-paint: sets the theme class before first render so the
             page never flashes light before switching to dark. */}

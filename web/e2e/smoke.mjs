@@ -232,12 +232,24 @@ async function run() {
     check('Session is really gone after sign out', page.url().includes('/login'));
   } finally {
     await browser.close();
+    // In the finally, not after it. The unreachable-Supabase path returns early
+    // from the middle of the try, which used to skip the report entirely: no
+    // tally, no SKIPPED list, and -- worst -- the failure check never ran, so a
+    // failing unauthenticated check still exited 0. The report has to run on
+    // every path out of this function, which is what `finally` is for.
+    report();
   }
+}
 
-  // ------------------------------------------------------------- report
+// ------------------------------------------------------------- report
+function report() {
   check('No uncaught page errors', pageErrors.length === 0, pageErrors.slice(0, 2).join(' | '));
+  // 'hydrat' is deliberately NOT filtered. It used to be, which hid a real
+  // hydration mismatch on <html> from every run: the suite reported "No console
+  // errors" while every dark-mode visitor hit one. A hydration error is a bug,
+  // not noise.
   const realConsoleErrors = consoleErrors.filter(
-    (e) => !/favicon|Download the React DevTools|hydrat/i.test(e),
+    (e) => !/favicon|Download the React DevTools/i.test(e),
   );
   check(
     'No console errors',
@@ -246,7 +258,7 @@ async function run() {
   );
 
   const failed = results.filter((r) => !r.passed);
-  console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
+  console.log(`\n${results.length - failed.length}/${results.length} checks ran and passed`);
   if (skipped.length) {
     console.log(`\n${skipped.length} checks SKIPPED (Supabase unreachable): ${skipped.join(', ')}`);
     console.log('These are NOT passing -- they were never run.');
@@ -254,7 +266,9 @@ async function run() {
   if (failed.length) {
     console.log('\nFAILED:');
     for (const f of failed) console.log(`  - ${f.name} ${f.detail}`);
-    process.exit(1);
+    // exitCode rather than exit(): this runs inside a finally, and exiting here
+    // would swallow an in-flight exception before the catch below can report it.
+    process.exitCode = 1;
   }
 }
 
