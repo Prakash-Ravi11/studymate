@@ -52,11 +52,36 @@ export type Database = {
           subject_id?: string | null;
           user_id?: string;
         };
+        Relationships: [
+          {
+            foreignKeyName: 'activity_subject_id_fkey';
+            columns: ['subject_id'];
+            isOneToOne: false;
+            referencedRelation: 'subjects';
+            referencedColumns: ['id'];
+          },
+        ];
       };
       note_attachments: {
         Row: { created_at: string; note_id: string; resource_id: string; user_id: string };
         Insert: { created_at?: string; note_id: string; resource_id: string; user_id: string };
         Update: { created_at?: string; note_id?: string; resource_id?: string; user_id?: string };
+        Relationships: [
+          {
+            foreignKeyName: 'note_attachments_note_id_fkey';
+            columns: ['note_id'];
+            isOneToOne: false;
+            referencedRelation: 'notes';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'note_attachments_resource_id_fkey';
+            columns: ['resource_id'];
+            isOneToOne: false;
+            referencedRelation: 'resources';
+            referencedColumns: ['id'];
+          },
+        ];
       };
       notes: {
         Row: {
@@ -102,6 +127,15 @@ export type Database = {
           updated_at?: string;
           user_id?: string;
         };
+        Relationships: [
+          {
+            foreignKeyName: 'notes_subject_id_fkey';
+            columns: ['subject_id'];
+            isOneToOne: false;
+            referencedRelation: 'subjects';
+            referencedColumns: ['id'];
+          },
+        ];
       };
       profiles: {
         Row: {
@@ -153,6 +187,7 @@ export type Database = {
           updated_at?: string;
           year?: number | null;
         };
+        Relationships: [];
       };
       reminders: {
         Row: {
@@ -198,6 +233,15 @@ export type Database = {
           updated_at?: string;
           user_id?: string;
         };
+        Relationships: [
+          {
+            foreignKeyName: 'reminders_task_id_fkey';
+            columns: ['task_id'];
+            isOneToOne: false;
+            referencedRelation: 'tasks';
+            referencedColumns: ['id'];
+          },
+        ];
       };
       resources: {
         Row: {
@@ -250,6 +294,15 @@ export type Database = {
           updated_at?: string;
           user_id?: string;
         };
+        Relationships: [
+          {
+            foreignKeyName: 'resources_subject_id_fkey';
+            columns: ['subject_id'];
+            isOneToOne: false;
+            referencedRelation: 'subjects';
+            referencedColumns: ['id'];
+          },
+        ];
       };
       subjects: {
         Row: {
@@ -293,11 +346,28 @@ export type Database = {
           updated_at?: string;
           user_id?: string;
         };
+        Relationships: [];
       };
       task_attachments: {
         Row: { created_at: string; resource_id: string; task_id: string; user_id: string };
         Insert: { created_at?: string; resource_id: string; task_id: string; user_id: string };
         Update: { created_at?: string; resource_id?: string; task_id?: string; user_id?: string };
+        Relationships: [
+          {
+            foreignKeyName: 'task_attachments_resource_id_fkey';
+            columns: ['resource_id'];
+            isOneToOne: false;
+            referencedRelation: 'resources';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'task_attachments_task_id_fkey';
+            columns: ['task_id'];
+            isOneToOne: false;
+            referencedRelation: 'tasks';
+            referencedColumns: ['id'];
+          },
+        ];
       };
       tasks: {
         Row: {
@@ -359,6 +429,29 @@ export type Database = {
           user_id?: string;
           voice_note_id?: string | null;
         };
+        Relationships: [
+          {
+            foreignKeyName: 'tasks_note_id_fkey';
+            columns: ['note_id'];
+            isOneToOne: false;
+            referencedRelation: 'notes';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'tasks_subject_id_fkey';
+            columns: ['subject_id'];
+            isOneToOne: false;
+            referencedRelation: 'subjects';
+            referencedColumns: ['id'];
+          },
+          {
+            foreignKeyName: 'tasks_voice_note_id_fkey';
+            columns: ['voice_note_id'];
+            isOneToOne: false;
+            referencedRelation: 'voice_notes';
+            referencedColumns: ['id'];
+          },
+        ];
       };
       voice_notes: {
         Row: {
@@ -414,6 +507,15 @@ export type Database = {
           updated_at?: string;
           user_id?: string;
         };
+        Relationships: [
+          {
+            foreignKeyName: 'voice_notes_subject_id_fkey';
+            columns: ['subject_id'];
+            isOneToOne: false;
+            referencedRelation: 'subjects';
+            referencedColumns: ['id'];
+          },
+        ];
       };
     };
     Views: Record<never, never>;

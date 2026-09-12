@@ -56,6 +56,7 @@ export function Field({
     id: string;
     'aria-invalid': boolean;
     'aria-describedby': string | undefined;
+    'aria-required': boolean | undefined;
   }) => React.ReactNode;
   className?: string;
 }) {
@@ -74,7 +75,13 @@ export function Field({
           </span>
         )}
       </label>
-      {children({ id, 'aria-invalid': Boolean(error), 'aria-describedby': describedBy })}
+      {children({
+        id,
+        'aria-invalid': Boolean(error),
+        'aria-describedby': describedBy,
+        // The visual asterisk is aria-hidden, so requiredness is conveyed here.
+        'aria-required': required || undefined,
+      })}
       {error ? (
         <p id={errorId} role="alert" className="text-xs text-danger">
           {error}

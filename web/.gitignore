@@ -42,3 +42,6 @@ next-env.d.ts
 
 # The documented template is meant to be committed; real values are not.
 !.env.example
+
+# Playwright artefacts
+web/e2e/screenshots/
