@@ -1,5 +1,5 @@
 /**
- * Generated from the StudyMate Postgres schema (supabase/migrations/0001-0010).
+ * Generated from the StudyMate Postgres schema (supabase/migrations/0001-0012).
  *
  * Regenerate after any migration:
  *   npx supabase gen types typescript --project-id <ref> > src/lib/supabase/database.types.ts
@@ -191,7 +191,9 @@ export type Database = {
       };
       reminders: {
         Row: {
+          attempts: number;
           channel: Database['public']['Enums']['reminder_channel'];
+          claimed_at: string | null;
           created_at: string;
           error: string | null;
           fire_at: string;
@@ -206,7 +208,9 @@ export type Database = {
           user_id: string;
         };
         Insert: {
+          attempts?: number;
           channel?: Database['public']['Enums']['reminder_channel'];
+          claimed_at?: string | null;
           created_at?: string;
           error?: string | null;
           fire_at: string;
@@ -221,7 +225,9 @@ export type Database = {
           user_id: string;
         };
         Update: {
+          attempts?: number;
           channel?: Database['public']['Enums']['reminder_channel'];
+          claimed_at?: string | null;
           error?: string | null;
           fire_at?: string;
           label?: string | null;
@@ -560,6 +566,34 @@ export type Database = {
         }[];
       };
       tags_to_text: { Args: { tags: string[] }; Returns: string };
+
+      /**
+       * Outbound reminder delivery. Service role only -- EXECUTE is revoked
+       * from anon and authenticated, so calling these from a browser session
+       * fails at the database, not just by convention.
+       */
+      claim_due_reminders: {
+        Args: { p_limit?: number; p_lease?: string; p_max_attempts?: number };
+        Returns: {
+          id: string;
+          user_id: string;
+          task_id: string | null;
+          label: string | null;
+          fire_at: string;
+          channel: Database['public']['Enums']['reminder_channel'];
+          attempts: number;
+          email: string | null;
+          timezone: string;
+          task_title: string | null;
+          task_due_at: string | null;
+          task_due_has_time: boolean | null;
+        }[];
+      };
+      complete_reminder: {
+        Args: { p_id: string; p_error?: string | null; p_max_attempts?: number };
+        Returns: undefined;
+      };
+      release_reminder_claim: { Args: { p_id: string }; Returns: undefined };
     };
     Enums: {
       activity_kind: 'created' | 'updated' | 'completed' | 'deleted' | 'uploaded' | 'recorded';

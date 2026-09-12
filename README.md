@@ -5,10 +5,10 @@ rich-text notes, a file library, voice notes, a calendar, and search across all
 of it. Built as a Next.js web app on Supabase.
 
 > **Status:** the web app is built and type-checks, and the database layer is
-> applied and security-tested against the live project. The application's
-> runtime flows have **not** been verified end-to-end yet, and reminder
-> *delivery* is not implemented. See [Current limitations](#current-limitations)
-> before relying on anything here — that section is accurate, not aspirational.
+> applied and tested against the live project. The application's runtime flows
+> have **not** been verified end-to-end yet, and web push reminders are not
+> implemented. See [Current limitations](#current-limitations) before relying on
+> anything here — that section is accurate, not aspirational.
 
 ---
 
@@ -76,6 +76,51 @@ Ten tables plus a `subject_overview` view: `profiles`, `subjects`, `resources`,
   so the UI never has to invent a time and then display its own invention back
   to the student.
 
+### Reminders
+
+A reminder stores both the rule and the instant: `offset_minutes` means "a day
+before the deadline" and survives the due date moving, while `fire_at` is the
+concrete UTC instant a scheduler can index. A trigger re-anchors `fire_at`
+whenever the parent task's `due_at` changes, so a rescheduled assignment never
+keeps a stale reminder.
+
+Delivery splits by channel, and the split is not cosmetic:
+
+- **`in_app`** is delivered *by being read*. The notification tray queries
+  reminders whose instant has passed, so it works with no worker, no cron and no
+  extra configuration. Modelling it as a send would mean every reminder silently
+  failing on any deployment that had not set up a scheduler.
+- **`email`** is pushed outward by a worker — see below.
+- **`push`** is **not implemented.** Web Push needs a VAPID key pair, a service
+  worker and a table of per-device subscriptions, none of which exist. The
+  worker reports the channel as unconfigured and leaves the reminder queued
+  rather than marking it sent; the UI does not offer the channel.
+
+#### Running the delivery worker
+
+Only needed for email. Set `SUPABASE_SERVICE_ROLE_KEY` and
+`REMINDER_CRON_SECRET`, then point any scheduler at the endpoint:
+
+```bash
+curl -X POST https://your-app/api/reminders/deliver \
+     -H "Authorization: Bearer $REMINDER_CRON_SECRET"
+```
+
+Once a minute is plenty — reminder granularity is a minute. The response is a
+run summary: how many were claimed, delivered, failed, and how many were
+skipped because the channel is unconfigured.
+
+Claiming is lease-based rather than status-based, which makes overlapping runs
+safe (`FOR UPDATE SKIP LOCKED`) and means a worker that dies mid-send strands
+nothing — the lease expires and the next run picks the work up. Failures are
+retried to a ceiling of five attempts and then marked `failed` with the
+provider's reason kept on the row. A channel this deployment cannot deliver at
+all is *released* rather than failed, handing back both the lease and the
+attempt, so a missing API key never walks a good reminder to `failed`.
+
+With both secrets unset the endpoint returns 503 and does nothing — it will not
+claim reminders it cannot deliver.
+
 ### Storage
 
 Three **private** buckets with MIME allowlists and size caps:
@@ -122,7 +167,10 @@ Fill in `.env.local` from **Supabase Dashboard → Project Settings → API**:
 | `NEXT_PUBLIC_SUPABASE_URL` | yes | `https://<ref>.supabase.co` |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | yes | The publishable ("anon") key. Safe in the browser — it carries no privileges of its own and every request it makes is still gated by RLS. |
 | `NEXT_PUBLIC_SITE_URL` | yes | Public origin; used to build password-reset and email-confirmation links. |
-| `SUPABASE_SERVICE_ROLE_KEY` | no | **Bypasses RLS entirely.** Server-only. Needed only for the reminder-delivery worker. Never prefix it with `NEXT_PUBLIC_`. |
+| `SUPABASE_SERVICE_ROLE_KEY` | no | **Bypasses RLS entirely.** Server-only. Needed only for outbound reminder delivery. Never prefix it with `NEXT_PUBLIC_`. |
+| `REMINDER_CRON_SECRET` | no | Shared secret for the delivery endpoint. Required alongside the service-role key. |
+| `EMAIL_PROVIDER` | no | `resend` to enable email reminders; leave unset to disable. |
+| `EMAIL_API_KEY` / `EMAIL_FROM` | no | Required when a provider is set. |
 | `TRANSCRIPTION_PROVIDER` | no | `openai` to enable voice transcription; leave unset to disable. |
 | `TRANSCRIPTION_API_KEY` | no | Required when a provider is set. |
 | `TRANSCRIPTION_MODEL` | no | Defaults to `whisper-1`. |
@@ -178,6 +226,18 @@ callable by `anon` through `/rest/v1/rpc/handle_new_user`, because PostgREST
 exposes every `public` function and Postgres grants `EXECUTE` to `PUBLIC` by
 default. Migration `0010` revokes it on all trigger functions.
 
+**`supabase/tests/reminder_delivery_test.sql` — 22/22 passing.** Covers the
+claim/complete contract the worker depends on: that a due reminder is leased
+exactly once, that a warm lease blocks a second worker and an expired one does
+not, that `in_app` rows are left for the app, that reminders on finished tasks
+and reminders a student switched off in Settings are never claimed, that the
+attempt ceiling holds, and that neither function is reachable from `anon` or
+`authenticated`.
+
+```bash
+psql "$DATABASE_URL" -f supabase/tests/reminder_delivery_test.sql
+```
+
 **`web/e2e/smoke.mjs`** drives a real Chromium against a running dev server.
 It probes Supabase reachability first and marks the authenticated half of the
 suite **SKIPPED** when the host is unreachable — *skipped is not passed*. A
@@ -198,13 +258,13 @@ Stated plainly, because a README that overstates a build is worse than no README
    builds, but sign-in, onboarding, dashboard, uploads and recording have not
    been exercised against a live Supabase instance from the development
    environment, because its egress policy blocks `*.supabase.co`. The database
-   layer *is* verified — migrations and the RLS suite ran against the real
-   project through a different path.
-2. **Reminders are stored but never delivered.** The schema, the scheduling
-   trigger and the channel abstraction (`in_app` / `push` / `email`) all exist,
-   and `fire_at` is re-anchored automatically when a task's due date moves. No
-   worker claims due rows and sends anything. Reminders are queryable, not
-   functional.
+   layer *is* verified — migrations, the RLS suite and the reminder-delivery
+   suite all ran against the real project through a different path. Email
+   delivery in particular has never made a real call to a provider.
+2. **Web push reminders are not implemented.** In-app delivery works with no
+   configuration, and email delivery works once a provider is configured. The
+   `push` channel is stored and understood but nothing sends it, and the worker
+   says so rather than marking such reminders sent.
 3. **Recurring tasks do not expand.** `repeat_rule` (RRULE) is stored and
    round-trips, but nothing generates the occurrences.
 4. **`frontend/` and `backend/` are dead weight.** They are the previous Expo and

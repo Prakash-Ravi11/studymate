@@ -1,5 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { getProfile } from './profile';
+import { OPEN_STATUSES } from './dashboard';
+import type { TaskStatus } from '@/lib/supabase/database.types';
 
 /**
  * In-app reminder delivery.
@@ -42,7 +44,7 @@ type ReminderRow = {
     title: string;
     due_at: string | null;
     due_has_time: boolean;
-    status: string;
+    status: TaskStatus;
     subject_id: string | null;
     subjects: { name: string; color: string } | null;
   } | null;
@@ -85,9 +87,8 @@ export async function listDueReminders(limit = 25): Promise<DueReminder[]> {
       // A task that is already finished or abandoned has nothing to remind
       // about. completeTask cancels its reminders, but a status changed by any
       // other path (or a row predating that code) must not resurface here.
-      if (row.tasks && row.tasks.status !== 'todo' && row.tasks.status !== 'in_progress') {
-        return false;
-      }
+      // OPEN_STATUSES is shared with the task views so the two cannot drift.
+      if (row.tasks && !OPEN_STATUSES.includes(row.tasks.status)) return false;
       // offset_minutes is what distinguishes the two notification switches in
       // Settings: a relative reminder tracks a deadline, an absolute one is a
       // reminder the student set on a task themselves.

@@ -27,12 +27,23 @@ const PUBLIC_ROUTES = [
   '/auth/auth-code-error',
 ];
 
+/**
+ * Routes that authenticate themselves and must not be sent to /login.
+ *
+ * The reminder worker is driven by a scheduler with no cookies, so the session
+ * gate below would bounce every run to the sign-in page and silently deliver
+ * nothing. It carries its own bearer secret and checks it before doing any
+ * work -- exempting it here removes the redirect, not the authentication.
+ */
+const SELF_AUTHENTICATED_ROUTES = ['/api/reminders/deliver'];
+
 /** Signed-in users have no business on these; send them to the dashboard. */
 const AUTH_ROUTES = ['/login', '/signup', '/forgot-password'];
 
 function isPublic(pathname: string) {
-  return PUBLIC_ROUTES.some(
-    (route) => pathname === route || pathname.startsWith(`${route}/`),
+  return (
+    PUBLIC_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`)) ||
+    SELF_AUTHENTICATED_ROUTES.includes(pathname)
   );
 }
 
