@@ -100,6 +100,41 @@ tasks, notes, search, uploads — is fine either way.
   (36/36 against a clean cluster) and the app builds clean, but you are the first
   real user. Report anything that breaks.
 
+## Troubleshooting
+
+### "404: NOT_FOUND" on every path, but the deployment says Ready
+
+The build succeeded and served nothing, which almost always means Vercel built
+code that contains no Next.js app. Check the deployment's **Source** line in the
+Vercel dashboard — it names the repository, branch and commit actually built.
+
+Three ways to land here, all of which produce an identical 404:
+
+1. **Wrong repository.** This project was forked from
+   `Harsh-Thakur-2006/StudyMate`. Importing the upstream rather than
+   `Prakash-Ravi11/studymate` deploys a repo that has never contained the
+   rebuild.
+2. **Wrong branch.** `main` is still the original Expo + Spring Boot tree. At
+   `51a379c` the repository root is only `.vscode`, `README.md`, `backend` and
+   `frontend` — no `web/`, no Next.js app. The rebuild lives on
+   `claude/fervent-mendel-w123jn` until the PR is merged.
+3. **Root Directory unset.** Even on the right branch, building from the
+   repository root finds `frontend/`, `backend/`, `supabase/` and `web/` with no
+   app at top level.
+
+Confirm what a given commit actually contains before assuming the build is at
+fault:
+
+```bash
+git ls-tree --name-only <commit>      # expect a `web` entry
+```
+
+### Preview URLs instead of a stable one
+
+Vercel only treats the **production branch** as production. While the rebuild is
+unmerged, set **Settings → Git → Production Branch** to
+`claude/fervent-mendel-w123jn`, or merge the PR and leave it on `main`.
+
 ## Redeploying
 
 Vercel rebuilds on every push to the branch. To point production at `main`
