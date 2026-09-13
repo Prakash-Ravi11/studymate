@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient, getCurrentUser } from '@/lib/supabase/server';
 import { SESSION_EXPIRED, dbFailure, type ActionResult } from './result';
 import { logActivity } from './activity';
+import { withResult } from './with-result';
 
 const HEX = /^#[0-9A-Fa-f]{6}$/;
 
@@ -22,47 +23,49 @@ export async function createSubject(input: {
   color: string;
   semester?: number | null;
 }): Promise<ActionResult<{ id: string }>> {
-  const user = await getCurrentUser();
-  if (!user) return { ok: false, error: SESSION_EXPIRED };
-  const invalid = validate(input.name, input.color);
-  if (invalid) return { ok: false, error: invalid };
+  return withResult('create that subject', async () => {
+    const user = await getCurrentUser();
+    if (!user) return { ok: false, error: SESSION_EXPIRED };
+    const invalid = validate(input.name, input.color);
+    if (invalid) return { ok: false, error: invalid };
 
-  const supabase = await createClient();
-  const { data, error } = await supabase
-    .from('subjects')
-    .insert({
-      user_id: user.id,
-      name: input.name.trim(),
-      code: input.code?.trim() || null,
-      instructor: input.instructor?.trim() || null,
-      description: input.description?.trim() || null,
-      color: input.color,
-      semester: input.semester ?? null,
-    })
-    .select('id')
-    .single();
+    const supabase = await createClient();
+    const { data, error } = await supabase
+      .from('subjects')
+      .insert({
+        user_id: user.id,
+        name: input.name.trim(),
+        code: input.code?.trim() || null,
+        instructor: input.instructor?.trim() || null,
+        description: input.description?.trim() || null,
+        color: input.color,
+        semester: input.semester ?? null,
+      })
+      .select('id')
+      .single();
 
-  if (error) {
-    // subjects_user_code_key: one subject code per student.
-    if (error.code === '23505') {
-      return { ok: false, error: 'You already have a subject with that code.' };
+    if (error) {
+      // subjects_user_code_key: one subject code per student.
+      if (error.code === '23505') {
+        return { ok: false, error: 'You already have a subject with that code.' };
+      }
+      console.error('createSubject failed:', error.message);
+      return dbFailure('create that subject', error.message);
     }
-    console.error('createSubject failed:', error.message);
-    return dbFailure('create that subject', error.message);
-  }
 
-  await logActivity(supabase, {
-    user_id: user.id,
-    kind: 'created',
-    entity_type: 'subject',
-    entity_id: data.id,
-    subject_id: data.id,
-    entity_title: input.name.trim(),
+    await logActivity(supabase, {
+      user_id: user.id,
+      kind: 'created',
+      entity_type: 'subject',
+      entity_id: data.id,
+      subject_id: data.id,
+      entity_title: input.name.trim(),
+    });
+
+    revalidatePath('/subjects');
+    revalidatePath('/home');
+    return { ok: true, data: { id: data.id } };
   });
-
-  revalidatePath('/subjects');
-  revalidatePath('/home');
-  return { ok: true, data: { id: data.id } };
 }
 
 export async function updateSubject(
@@ -76,41 +79,43 @@ export async function updateSubject(
     semester?: number | null;
   },
 ): Promise<ActionResult> {
-  if (!(await getCurrentUser())) return { ok: false, error: SESSION_EXPIRED };
+  return withResult('save that subject', async () => {
+    if (!(await getCurrentUser())) return { ok: false, error: SESSION_EXPIRED };
 
-  if (patch.name !== undefined || patch.color !== undefined) {
-    const invalid = validate(patch.name ?? 'x', patch.color ?? '#000000');
-    if (patch.name !== undefined && !patch.name.trim()) {
-      return { ok: false, error: 'Give the subject a name.' };
+    if (patch.name !== undefined || patch.color !== undefined) {
+      const invalid = validate(patch.name ?? 'x', patch.color ?? '#000000');
+      if (patch.name !== undefined && !patch.name.trim()) {
+        return { ok: false, error: 'Give the subject a name.' };
+      }
+      if (patch.color !== undefined && !HEX.test(patch.color)) {
+        return { ok: false, error: 'Pick a colour from the palette.' };
+      }
+      if (patch.name !== undefined && patch.name.trim().length > 120) return { ok: false, error: invalid! };
     }
-    if (patch.color !== undefined && !HEX.test(patch.color)) {
-      return { ok: false, error: 'Pick a colour from the palette.' };
+
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from('subjects')
+      .update({
+        ...(patch.name !== undefined && { name: patch.name.trim() }),
+        ...(patch.code !== undefined && { code: patch.code?.trim() || null }),
+        ...(patch.instructor !== undefined && { instructor: patch.instructor?.trim() || null }),
+        ...(patch.description !== undefined && { description: patch.description?.trim() || null }),
+        ...(patch.color !== undefined && { color: patch.color }),
+        ...(patch.semester !== undefined && { semester: patch.semester }),
+      })
+      .eq('id', id);
+
+    if (error) {
+      if (error.code === '23505') return { ok: false, error: 'You already have a subject with that code.' };
+      console.error('updateSubject failed:', error.message);
+      return { ok: false, error: 'Could not save those changes.' };
     }
-    if (patch.name !== undefined && patch.name.trim().length > 120) return { ok: false, error: invalid! };
-  }
 
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from('subjects')
-    .update({
-      ...(patch.name !== undefined && { name: patch.name.trim() }),
-      ...(patch.code !== undefined && { code: patch.code?.trim() || null }),
-      ...(patch.instructor !== undefined && { instructor: patch.instructor?.trim() || null }),
-      ...(patch.description !== undefined && { description: patch.description?.trim() || null }),
-      ...(patch.color !== undefined && { color: patch.color }),
-      ...(patch.semester !== undefined && { semester: patch.semester }),
-    })
-    .eq('id', id);
-
-  if (error) {
-    if (error.code === '23505') return { ok: false, error: 'You already have a subject with that code.' };
-    console.error('updateSubject failed:', error.message);
-    return { ok: false, error: 'Could not save those changes.' };
-  }
-
-  revalidatePath('/subjects');
-  revalidatePath(`/subjects/${id}`);
-  return { ok: true, data: undefined };
+    revalidatePath('/subjects');
+    revalidatePath(`/subjects/${id}`);
+    return { ok: true, data: undefined };
+  });
 }
 
 /**
@@ -121,53 +126,57 @@ export async function updateSubject(
  * tidied away would be unforgivable; the UI says so before confirming.
  */
 export async function deleteSubject(id: string): Promise<ActionResult> {
-  const user = await getCurrentUser();
-  if (!user) return { ok: false, error: SESSION_EXPIRED };
-  const supabase = await createClient();
+  return withResult('delete that subject', async () => {
+    const user = await getCurrentUser();
+    if (!user) return { ok: false, error: SESSION_EXPIRED };
+    const supabase = await createClient();
 
-  const { data: existing } = await supabase
-    .from('subjects')
-    .select('name')
-    .eq('id', id)
-    .single();
+    const { data: existing } = await supabase
+      .from('subjects')
+      .select('name')
+      .eq('id', id)
+      .single();
 
-  const { error } = await supabase.from('subjects').delete().eq('id', id);
+    const { error } = await supabase.from('subjects').delete().eq('id', id);
 
-  if (error) {
-    console.error('deleteSubject failed:', error.message);
-    return { ok: false, error: 'Could not delete that subject.' };
-  }
+    if (error) {
+      console.error('deleteSubject failed:', error.message);
+      return { ok: false, error: 'Could not delete that subject.' };
+    }
 
-  if (existing) {
-    await logActivity(supabase, {
-      user_id: user.id,
-      kind: 'deleted',
-      entity_type: 'subject',
-      entity_id: null,
-      subject_id: null,
-      entity_title: existing.name,
-    });
-  }
+    if (existing) {
+      await logActivity(supabase, {
+        user_id: user.id,
+        kind: 'deleted',
+        entity_type: 'subject',
+        entity_id: null,
+        subject_id: null,
+        entity_title: existing.name,
+      });
+    }
 
-  revalidatePath('/subjects');
-  revalidatePath('/home');
-  return { ok: true, data: undefined };
+    revalidatePath('/subjects');
+    revalidatePath('/home');
+    return { ok: true, data: undefined };
+  });
 }
 
 export async function setSubjectArchived(id: string, archived: boolean): Promise<ActionResult> {
-  if (!(await getCurrentUser())) return { ok: false, error: SESSION_EXPIRED };
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from('subjects')
-    .update({ archived_at: archived ? new Date().toISOString() : null })
-    .eq('id', id);
+  return withResult('archive that subject', async () => {
+    if (!(await getCurrentUser())) return { ok: false, error: SESSION_EXPIRED };
+    const supabase = await createClient();
+    const { error } = await supabase
+      .from('subjects')
+      .update({ archived_at: archived ? new Date().toISOString() : null })
+      .eq('id', id);
 
-  if (error) {
-    console.error('setSubjectArchived failed:', error.message);
-    return { ok: false, error: 'Could not update that subject.' };
-  }
+    if (error) {
+      console.error('setSubjectArchived failed:', error.message);
+      return { ok: false, error: 'Could not update that subject.' };
+    }
 
-  revalidatePath('/subjects');
-  revalidatePath(`/subjects/${id}`);
-  return { ok: true, data: undefined };
+    revalidatePath('/subjects');
+    revalidatePath(`/subjects/${id}`);
+    return { ok: true, data: undefined };
+  });
 }

@@ -5,6 +5,7 @@ import { createClient, getCurrentUser } from '@/lib/supabase/server';
 import type { TablesUpdate, TaskPriority, TaskStatus } from '@/lib/supabase/database.types';
 import { SESSION_EXPIRED, dbFailure, type ActionResult } from './result';
 import { logActivity } from './activity';
+import { withResult } from './with-result';
 
 
 /** Paths whose cached output depends on task state. */
@@ -29,114 +30,118 @@ export async function createTask(input: {
   /** Minutes relative to due_at; negative means before. */
   reminderOffsetMinutes?: number | null;
 }): Promise<ActionResult<{ id: string }>> {
-  const user = await getCurrentUser();
-  if (!user) return { ok: false, error: SESSION_EXPIRED };
-  const title = input.title.trim();
+  return withResult('create that task', async () => {
+    const user = await getCurrentUser();
+    if (!user) return { ok: false, error: SESSION_EXPIRED };
+    const title = input.title.trim();
 
-  if (!title) return { ok: false, error: 'Give the task a title.' };
-  if (title.length > 300) return { ok: false, error: 'That title is too long (max 300 characters).' };
+    if (!title) return { ok: false, error: 'Give the task a title.' };
+    if (title.length > 300) return { ok: false, error: 'That title is too long (max 300 characters).' };
 
-  const supabase = await createClient();
+    const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from('tasks')
-    .insert({
+    const { data, error } = await supabase
+      .from('tasks')
+      .insert({
+        user_id: user.id,
+        title,
+        description: input.description?.trim() || null,
+        subject_id: input.subjectId || null,
+        due_at: input.dueAt ?? null,
+        due_has_time: Boolean(input.dueAt && input.dueHasTime),
+        priority: input.priority ?? 'none',
+        // A task with a date is planned; one without is still in the inbox.
+        status: input.status ?? (input.dueAt ? 'planned' : 'inbox'),
+        tags: input.tags ?? [],
+        note_id: input.noteId || null,
+        voice_note_id: input.voiceNoteId || null,
+      })
+      .select('id,subject_id')
+      .single();
+
+    if (error) {
+      console.error('createTask failed:', error.message);
+      return dbFailure('save that task', error.message);
+    }
+
+    if (input.reminderOffsetMinutes != null && input.dueAt) {
+      const fireAt = new Date(
+        new Date(input.dueAt).getTime() + input.reminderOffsetMinutes * 60_000,
+      ).toISOString();
+
+      const { error: reminderError } = await supabase.from('reminders').insert({
+        user_id: user.id,
+        task_id: data.id,
+        fire_at: fireAt,
+        offset_minutes: input.reminderOffsetMinutes,
+      });
+
+      // The task exists; a failed reminder must not discard it. Report the
+      // partial outcome instead of claiming total success or total failure.
+      if (reminderError) {
+        console.error('Reminder creation failed:', reminderError.message);
+        revalidateTaskViews(data.subject_id);
+        return { ok: false, error: 'Task saved, but the reminder could not be set.' };
+      }
+    }
+
+    await logActivity(supabase, {
       user_id: user.id,
-      title,
-      description: input.description?.trim() || null,
-      subject_id: input.subjectId || null,
-      due_at: input.dueAt ?? null,
-      due_has_time: Boolean(input.dueAt && input.dueHasTime),
-      priority: input.priority ?? 'none',
-      // A task with a date is planned; one without is still in the inbox.
-      status: input.status ?? (input.dueAt ? 'planned' : 'inbox'),
-      tags: input.tags ?? [],
-      note_id: input.noteId || null,
-      voice_note_id: input.voiceNoteId || null,
-    })
-    .select('id,subject_id')
-    .single();
-
-  if (error) {
-    console.error('createTask failed:', error.message);
-    return dbFailure('save that task', error.message);
-  }
-
-  if (input.reminderOffsetMinutes != null && input.dueAt) {
-    const fireAt = new Date(
-      new Date(input.dueAt).getTime() + input.reminderOffsetMinutes * 60_000,
-    ).toISOString();
-
-    const { error: reminderError } = await supabase.from('reminders').insert({
-      user_id: user.id,
-      task_id: data.id,
-      fire_at: fireAt,
-      offset_minutes: input.reminderOffsetMinutes,
+      kind: 'created',
+      entity_type: 'task',
+      entity_id: data.id,
+      subject_id: data.subject_id,
+      entity_title: title,
     });
 
-    // The task exists; a failed reminder must not discard it. Report the
-    // partial outcome instead of claiming total success or total failure.
-    if (reminderError) {
-      console.error('Reminder creation failed:', reminderError.message);
-      revalidateTaskViews(data.subject_id);
-      return { ok: false, error: 'Task saved, but the reminder could not be set.' };
-    }
-  }
-
-  await logActivity(supabase, {
-    user_id: user.id,
-    kind: 'created',
-    entity_type: 'task',
-    entity_id: data.id,
-    subject_id: data.subject_id,
-    entity_title: title,
+    revalidateTaskViews(data.subject_id);
+    return { ok: true, data: { id: data.id } };
   });
-
-  revalidateTaskViews(data.subject_id);
-  return { ok: true, data: { id: data.id } };
 }
 
 export async function setTaskStatus(
   taskId: string,
   status: TaskStatus,
 ): Promise<ActionResult> {
-  const user = await getCurrentUser();
-  if (!user) return { ok: false, error: SESSION_EXPIRED };
-  const supabase = await createClient();
+  return withResult('update that task', async () => {
+    const user = await getCurrentUser();
+    if (!user) return { ok: false, error: SESSION_EXPIRED };
+    const supabase = await createClient();
 
-  // completed_at / cancelled_at are maintained by a database trigger, so they
-  // are never set here and cannot drift from status.
-  const { data, error } = await supabase
-    .from('tasks')
-    .update({ status })
-    .eq('id', taskId)
-    .select('id,title,subject_id')
-    .single();
+    // completed_at / cancelled_at are maintained by a database trigger, so they
+    // are never set here and cannot drift from status.
+    const { data, error } = await supabase
+      .from('tasks')
+      .update({ status })
+      .eq('id', taskId)
+      .select('id,title,subject_id')
+      .single();
 
-  if (error) {
-    console.error('setTaskStatus failed:', error.message);
-    return { ok: false, error: 'Could not update that task.' };
-  }
+    if (error) {
+      console.error('setTaskStatus failed:', error.message);
+      return { ok: false, error: 'Could not update that task.' };
+    }
 
-  if (status === 'completed') {
-    await logActivity(supabase, {
-      user_id: user.id,
-      kind: 'completed',
-      entity_type: 'task',
-      entity_id: data.id,
-      subject_id: data.subject_id,
-      entity_title: data.title,
-    });
-    // Finishing a task makes its pending reminders pointless.
-    await supabase
-      .from('reminders')
-      .update({ status: 'cancelled' })
-      .eq('task_id', taskId)
-      .eq('status', 'scheduled');
-  }
+    if (status === 'completed') {
+      await logActivity(supabase, {
+        user_id: user.id,
+        kind: 'completed',
+        entity_type: 'task',
+        entity_id: data.id,
+        subject_id: data.subject_id,
+        entity_title: data.title,
+      });
+      // Finishing a task makes its pending reminders pointless.
+      await supabase
+        .from('reminders')
+        .update({ status: 'cancelled' })
+        .eq('task_id', taskId)
+        .eq('status', 'scheduled');
+    }
 
-  revalidateTaskViews(data.subject_id);
-  return { ok: true, data: undefined };
+    revalidateTaskViews(data.subject_id);
+    return { ok: true, data: undefined };
+  });
 }
 
 export async function updateTask(
@@ -152,78 +157,82 @@ export async function updateTask(
     tags?: string[];
   },
 ): Promise<ActionResult> {
-  if (!(await getCurrentUser())) return { ok: false, error: SESSION_EXPIRED };
-  const supabase = await createClient();
+  return withResult('save that task', async () => {
+    if (!(await getCurrentUser())) return { ok: false, error: SESSION_EXPIRED };
+    const supabase = await createClient();
 
-  // Typed against the table so a stray key is a compile error, not a 400.
-  const update: TablesUpdate<'tasks'> = {};
-  if (patch.title !== undefined) {
-    const t = patch.title.trim();
-    if (!t) return { ok: false, error: 'Give the task a title.' };
-    update.title = t;
-  }
-  if (patch.description !== undefined) update.description = patch.description?.trim() || null;
-  if (patch.subjectId !== undefined) update.subject_id = patch.subjectId || null;
-  if (patch.dueAt !== undefined) {
-    update.due_at = patch.dueAt;
-    // Clearing the date must clear the time flag, or the CHECK constraint
-    // tasks_due_time_requires_due rejects the row.
-    update.due_has_time = patch.dueAt ? Boolean(patch.dueHasTime) : false;
-  } else if (patch.dueHasTime !== undefined) {
-    update.due_has_time = patch.dueHasTime;
-  }
-  if (patch.priority !== undefined) update.priority = patch.priority;
-  if (patch.status !== undefined) update.status = patch.status;
-  if (patch.tags !== undefined) update.tags = patch.tags;
+    // Typed against the table so a stray key is a compile error, not a 400.
+    const update: TablesUpdate<'tasks'> = {};
+    if (patch.title !== undefined) {
+      const t = patch.title.trim();
+      if (!t) return { ok: false, error: 'Give the task a title.' };
+      update.title = t;
+    }
+    if (patch.description !== undefined) update.description = patch.description?.trim() || null;
+    if (patch.subjectId !== undefined) update.subject_id = patch.subjectId || null;
+    if (patch.dueAt !== undefined) {
+      update.due_at = patch.dueAt;
+      // Clearing the date must clear the time flag, or the CHECK constraint
+      // tasks_due_time_requires_due rejects the row.
+      update.due_has_time = patch.dueAt ? Boolean(patch.dueHasTime) : false;
+    } else if (patch.dueHasTime !== undefined) {
+      update.due_has_time = patch.dueHasTime;
+    }
+    if (patch.priority !== undefined) update.priority = patch.priority;
+    if (patch.status !== undefined) update.status = patch.status;
+    if (patch.tags !== undefined) update.tags = patch.tags;
 
-  if (Object.keys(update).length === 0) return { ok: true, data: undefined };
+    if (Object.keys(update).length === 0) return { ok: true, data: undefined };
 
-  const { data, error } = await supabase
-    .from('tasks')
-    .update(update)
-    .eq('id', taskId)
-    .select('subject_id')
-    .single();
+    const { data, error } = await supabase
+      .from('tasks')
+      .update(update)
+      .eq('id', taskId)
+      .select('subject_id')
+      .single();
 
-  if (error) {
-    console.error('updateTask failed:', error.message);
-    return { ok: false, error: 'Could not save those changes.' };
-  }
+    if (error) {
+      console.error('updateTask failed:', error.message);
+      return { ok: false, error: 'Could not save those changes.' };
+    }
 
-  revalidateTaskViews(data.subject_id);
-  return { ok: true, data: undefined };
+    revalidateTaskViews(data.subject_id);
+    return { ok: true, data: undefined };
+  });
 }
 
 export async function deleteTask(taskId: string): Promise<ActionResult> {
-  const user = await getCurrentUser();
-  if (!user) return { ok: false, error: SESSION_EXPIRED };
-  const supabase = await createClient();
+  return withResult('delete that task', async () => {
+    const user = await getCurrentUser();
+    if (!user) return { ok: false, error: SESSION_EXPIRED };
+    const supabase = await createClient();
 
-  // Read first so the activity entry can keep a title after the row is gone.
-  const { data: existing } = await supabase
-    .from('tasks')
-    .select('title,subject_id')
-    .eq('id', taskId)
-    .single();
+    // Read first so the activity entry can keep a title after the row is gone.
+    const { data: existing } = await supabase
+      .from('tasks')
+      .select('title,subject_id')
+      .eq('id', taskId)
+      .single();
 
-  const { error } = await supabase.from('tasks').delete().eq('id', taskId);
+    const { error } = await supabase.from('tasks').delete().eq('id', taskId);
 
-  if (error) {
-    console.error('deleteTask failed:', error.message);
-    return { ok: false, error: 'Could not delete that task.' };
-  }
+    if (error) {
+      console.error('deleteTask failed:', error.message);
+      return { ok: false, error: 'Could not delete that task.' };
+    }
 
-  if (existing) {
-    await logActivity(supabase, {
-      user_id: user.id,
-      kind: 'deleted',
-      entity_type: 'task',
-      entity_id: null,
-      subject_id: existing.subject_id,
-      entity_title: existing.title,
-    });
-  }
+    if (existing) {
+      await logActivity(supabase, {
+        user_id: user.id,
+        kind: 'deleted',
+        entity_type: 'task',
+        entity_id: null,
+        subject_id: existing.subject_id,
+        entity_title: existing.title,
+      });
+    }
 
-  revalidateTaskViews(existing?.subject_id);
-  return { ok: true, data: undefined };
+    revalidateTaskViews(existing?.subject_id);
+    return { ok: true, data: undefined };
+  });
 }

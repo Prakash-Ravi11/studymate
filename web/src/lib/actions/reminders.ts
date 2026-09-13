@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { createClient, getCurrentUser } from '@/lib/supabase/server';
 import { listDueReminders, type DueReminder } from '@/lib/data/reminders';
 import { SESSION_EXPIRED, type ActionResult } from './result';
+import { withResult } from './with-result';
 
 /**
  * Re-read the due list from a client on a timer.
@@ -19,44 +20,48 @@ export async function fetchDueReminders(): Promise<DueReminder[]> {
 
 /** Acknowledge a reminder. Terminal: it will not come back. */
 export async function dismissReminder(id: string): Promise<ActionResult> {
-  if (!(await getCurrentUser())) return { ok: false, error: SESSION_EXPIRED };
-  const supabase = await createClient();
+  return withResult('dismiss that reminder', async () => {
+    if (!(await getCurrentUser())) return { ok: false, error: SESSION_EXPIRED };
+    const supabase = await createClient();
 
-  const { error } = await supabase
-    .from('reminders')
-    .update({ status: 'dismissed' })
-    .eq('id', id)
-    .eq('status', 'scheduled');
+    const { error } = await supabase
+      .from('reminders')
+      .update({ status: 'dismissed' })
+      .eq('id', id)
+      .eq('status', 'scheduled');
 
-  if (error) {
-    console.error('Failed to dismiss reminder:', error.message);
-    return { ok: false, error: 'Could not dismiss that reminder.' };
-  }
+    if (error) {
+      console.error('Failed to dismiss reminder:', error.message);
+      return { ok: false, error: 'Could not dismiss that reminder.' };
+    }
 
-  revalidatePath('/home');
-  return { ok: true, data: undefined };
+    revalidatePath('/home');
+    return { ok: true, data: undefined };
+  });
 }
 
 /** Acknowledge everything currently showing, in one statement. */
 export async function dismissAllReminders(): Promise<ActionResult<{ count: number }>> {
-  if (!(await getCurrentUser())) return { ok: false, error: SESSION_EXPIRED };
-  const supabase = await createClient();
+  return withResult('dismiss those reminders', async () => {
+    if (!(await getCurrentUser())) return { ok: false, error: SESSION_EXPIRED };
+    const supabase = await createClient();
 
-  const { data, error } = await supabase
-    .from('reminders')
-    .update({ status: 'dismissed' })
-    .eq('channel', 'in_app')
-    .eq('status', 'scheduled')
-    .lte('fire_at', new Date().toISOString())
-    .select('id');
+    const { data, error } = await supabase
+      .from('reminders')
+      .update({ status: 'dismissed' })
+      .eq('channel', 'in_app')
+      .eq('status', 'scheduled')
+      .lte('fire_at', new Date().toISOString())
+      .select('id');
 
-  if (error) {
-    console.error('Failed to dismiss reminders:', error.message);
-    return { ok: false, error: 'Could not clear your reminders.' };
-  }
+    if (error) {
+      console.error('Failed to dismiss reminders:', error.message);
+      return { ok: false, error: 'Could not clear your reminders.' };
+    }
 
-  revalidatePath('/home');
-  return { ok: true, data: { count: data?.length ?? 0 } };
+    revalidatePath('/home');
+    return { ok: true, data: { count: data?.length ?? 0 } };
+  });
 }
 
 /**
@@ -68,26 +73,28 @@ export async function dismissAllReminders(): Promise<ActionResult<{ count: numbe
  * to the new deadline, which is what the student asked for originally.
  */
 export async function snoozeReminder(id: string, minutes: number): Promise<ActionResult> {
-  if (!(await getCurrentUser())) return { ok: false, error: SESSION_EXPIRED };
+  return withResult('snooze that reminder', async () => {
+    if (!(await getCurrentUser())) return { ok: false, error: SESSION_EXPIRED };
 
-  if (!Number.isFinite(minutes) || minutes <= 0 || minutes > 60 * 24 * 30) {
-    return { ok: false, error: 'That is not a snooze duration.' };
-  }
+    if (!Number.isFinite(minutes) || minutes <= 0 || minutes > 60 * 24 * 30) {
+      return { ok: false, error: 'That is not a snooze duration.' };
+    }
 
-  const supabase = await createClient();
-  const fireAt = new Date(Date.now() + minutes * 60_000).toISOString();
+    const supabase = await createClient();
+    const fireAt = new Date(Date.now() + minutes * 60_000).toISOString();
 
-  const { error } = await supabase
-    .from('reminders')
-    .update({ fire_at: fireAt, status: 'scheduled' })
-    .eq('id', id)
-    .eq('status', 'scheduled');
+    const { error } = await supabase
+      .from('reminders')
+      .update({ fire_at: fireAt, status: 'scheduled' })
+      .eq('id', id)
+      .eq('status', 'scheduled');
 
-  if (error) {
-    console.error('Failed to snooze reminder:', error.message);
-    return { ok: false, error: 'Could not snooze that reminder.' };
-  }
+    if (error) {
+      console.error('Failed to snooze reminder:', error.message);
+      return { ok: false, error: 'Could not snooze that reminder.' };
+    }
 
-  revalidatePath('/home');
-  return { ok: true, data: undefined };
+    revalidatePath('/home');
+    return { ok: true, data: undefined };
+  });
 }
