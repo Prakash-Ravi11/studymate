@@ -1,10 +1,10 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
-import { requireUser } from '@/lib/data/guards';
+import { createClient, getCurrentUser } from '@/lib/supabase/server';
 import { transcribeAudio, isTranscriptionEnabled } from '@/lib/transcription';
-import type { ActionResult } from './tasks';
+import { SESSION_EXPIRED, type ActionResult } from './result';
+import { logActivity } from './activity';
 
 const BUCKET = 'voice-notes';
 
@@ -23,7 +23,8 @@ export async function registerVoiceNote(input: {
   title?: string;
   subjectId?: string | null;
 }): Promise<ActionResult<{ id: string; transcriptionEnabled: boolean }>> {
-  const user = await requireUser();
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: SESSION_EXPIRED };
   const supabase = await createClient();
 
   if (!input.filePath.startsWith(`users/${user.id}/`)) {
@@ -61,7 +62,7 @@ export async function registerVoiceNote(input: {
     return { ok: false, error: 'Could not save that recording. Please try again.' };
   }
 
-  await supabase.from('activity').insert({
+  await logActivity(supabase, {
     user_id: user.id,
     kind: 'recorded',
     entity_type: 'voice_note',
@@ -82,7 +83,7 @@ export async function registerVoiceNote(input: {
  * never round-trips through the browser and the API key never leaves the server.
  */
 export async function transcribeVoiceNote(id: string): Promise<ActionResult<{ status: string }>> {
-  await requireUser();
+  if (!(await getCurrentUser())) return { ok: false, error: SESSION_EXPIRED };
   const supabase = await createClient();
 
   if (!isTranscriptionEnabled()) {
@@ -151,7 +152,7 @@ export async function updateVoiceNote(
   id: string,
   patch: { title?: string; subjectId?: string | null },
 ): Promise<ActionResult> {
-  await requireUser();
+  if (!(await getCurrentUser())) return { ok: false, error: SESSION_EXPIRED };
   if (patch.title !== undefined && !patch.title.trim()) {
     return { ok: false, error: 'Give the recording a name.' };
   }
@@ -174,7 +175,7 @@ export async function updateVoiceNote(
 }
 
 export async function deleteVoiceNote(id: string): Promise<ActionResult> {
-  await requireUser();
+  if (!(await getCurrentUser())) return { ok: false, error: SESSION_EXPIRED };
   const supabase = await createClient();
 
   const { data: existing } = await supabase
@@ -204,7 +205,7 @@ export async function deleteVoiceNote(id: string): Promise<ActionResult> {
 }
 
 export async function getVoiceNoteUrl(id: string): Promise<ActionResult<{ url: string }>> {
-  await requireUser();
+  if (!(await getCurrentUser())) return { ok: false, error: SESSION_EXPIRED };
   const supabase = await createClient();
 
   const { data: note, error } = await supabase

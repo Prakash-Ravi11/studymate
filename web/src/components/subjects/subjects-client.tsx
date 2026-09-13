@@ -17,6 +17,7 @@ import { SubjectForm } from './subject-form';
 import { deleteSubject, setSubjectArchived } from '@/lib/actions/subjects';
 import { cn } from '@/lib/utils';
 import type { SubjectOverview } from '@/lib/supabase/database.types';
+import { runAction } from '@/lib/actions/run';
 
 function SubjectMenu({
   subject,
@@ -49,7 +50,7 @@ function SubjectMenu({
 
   async function toggleArchive() {
     setOpen(false);
-    const result = await setSubjectArchived(subject.id, !archived);
+    const result = await runAction(() => setSubjectArchived(subject.id, !archived));
     if (!result.ok) return toast(result.error, 'error');
     toast(archived ? `${subject.name} restored` : `${subject.name} archived`, 'success');
     router.refresh();
@@ -231,7 +232,7 @@ export function SubjectsClient({
   async function confirmDelete() {
     if (!deleting) return;
     setDeletePending(true);
-    const result = await deleteSubject(deleting.id);
+    const result = await runAction(() => deleteSubject(deleting.id));
     setDeletePending(false);
     if (!result.ok) return toast(result.error, 'error');
     toast(`${deleting.name} deleted`, 'success');
@@ -306,7 +307,17 @@ export function SubjectsClient({
         </div>
       )}
 
-      <SubjectForm open={formOpen} onClose={() => setFormOpen(false)} subject={editing} />
+      {/* Keyed and conditional so each open mounts a clean form: defaults come
+          from useState, with no effect needed to reset colour or clear a stale
+          error from the previous attempt. */}
+      {formOpen && (
+        <SubjectForm
+          key={editing?.id ?? 'new'}
+          open
+          onClose={() => setFormOpen(false)}
+          subject={editing}
+        />
+      )}
 
       <ConfirmModal
         open={Boolean(deleting)}

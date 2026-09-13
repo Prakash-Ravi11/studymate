@@ -8,6 +8,7 @@ import { createTask } from '@/lib/actions/tasks';
 import { useToast } from '@/components/ui/toast';
 import { formatDue } from '@/lib/dates';
 import { cn } from '@/lib/utils';
+import { runAction } from '@/lib/actions/run';
 
 type SubjectOption = { id: string; name: string; color: string };
 
@@ -63,7 +64,7 @@ export function QuickAdd({
   async function submit() {
     if (!canSubmit) return;
     setPending(true);
-    const result = await createTask({
+    const result = await runAction(() => createTask({
       title: parsed.title,
       subjectId: subjectId || null,
       dueAt: effectiveDue,
@@ -71,7 +72,7 @@ export function QuickAdd({
       priority: parsed.priority,
       tags: parsed.tags,
       reminderOffsetMinutes: reminder !== '' && effectiveDue ? Number(reminder) : null,
-    });
+    }));
     setPending(false);
 
     if (!result.ok) {

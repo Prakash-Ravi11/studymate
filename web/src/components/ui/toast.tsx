@@ -4,6 +4,7 @@ import * as React from 'react';
 import { createPortal } from 'react-dom';
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useIsClient } from '@/lib/use-client-value';
 
 type ToastTone = 'success' | 'error' | 'info';
 type Toast = { id: number; tone: ToastTone; message: string };
@@ -27,10 +28,8 @@ const TONES: Record<ToastTone, string> = {
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = React.useState<Toast[]>([]);
-  const [mounted, setMounted] = React.useState(false);
+  const isClient = useIsClient();
   const nextId = React.useRef(0);
-
-  React.useEffect(() => setMounted(true), []);
 
   const dismiss = React.useCallback((id: number) => {
     setToasts((t) => t.filter((x) => x.id !== id));
@@ -51,7 +50,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      {mounted &&
+      {isClient &&
         createPortal(
           // aria-live so a toast is announced without stealing focus.
           <div

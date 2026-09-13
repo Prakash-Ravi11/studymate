@@ -1,10 +1,9 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
-import { requireUser } from '@/lib/data/guards';
+import { createClient, getCurrentUser } from '@/lib/supabase/server';
 import { listDueReminders, type DueReminder } from '@/lib/data/reminders';
-import type { ActionResult } from './tasks';
+import { SESSION_EXPIRED, type ActionResult } from './result';
 
 /**
  * Re-read the due list from a client on a timer.
@@ -14,13 +13,13 @@ import type { ActionResult } from './tasks';
  * nothing the page could not already fetch.
  */
 export async function fetchDueReminders(): Promise<DueReminder[]> {
-  await requireUser();
+  if (!(await getCurrentUser())) return [];
   return listDueReminders();
 }
 
 /** Acknowledge a reminder. Terminal: it will not come back. */
 export async function dismissReminder(id: string): Promise<ActionResult> {
-  await requireUser();
+  if (!(await getCurrentUser())) return { ok: false, error: SESSION_EXPIRED };
   const supabase = await createClient();
 
   const { error } = await supabase
@@ -40,7 +39,7 @@ export async function dismissReminder(id: string): Promise<ActionResult> {
 
 /** Acknowledge everything currently showing, in one statement. */
 export async function dismissAllReminders(): Promise<ActionResult<{ count: number }>> {
-  await requireUser();
+  if (!(await getCurrentUser())) return { ok: false, error: SESSION_EXPIRED };
   const supabase = await createClient();
 
   const { data, error } = await supabase
@@ -69,7 +68,7 @@ export async function dismissAllReminders(): Promise<ActionResult<{ count: numbe
  * to the new deadline, which is what the student asked for originally.
  */
 export async function snoozeReminder(id: string, minutes: number): Promise<ActionResult> {
-  await requireUser();
+  if (!(await getCurrentUser())) return { ok: false, error: SESSION_EXPIRED };
 
   if (!Number.isFinite(minutes) || minutes <= 0 || minutes > 60 * 24 * 30) {
     return { ok: false, error: 'That is not a snooze duration.' };

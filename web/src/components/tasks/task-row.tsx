@@ -9,6 +9,7 @@ import { useToast } from '@/components/ui/toast';
 import { formatDue } from '@/lib/dates';
 import { cn } from '@/lib/utils';
 import type { TaskWithSubject } from '@/lib/data/dashboard';
+import { runAction } from '@/lib/actions/run';
 
 const PRIORITY_DOT: Record<string, string | null> = {
   none: null,
@@ -39,7 +40,7 @@ export function TaskRow({
     const next = !done;
     setDone(next);
     startTransition(async () => {
-      const result = await setTaskStatus(task.id, next ? 'completed' : 'planned');
+      const result = await runAction(() => setTaskStatus(task.id, next ? 'completed' : 'planned'));
       if (!result.ok) {
         setDone(!next);
         toast(result.error, 'error');

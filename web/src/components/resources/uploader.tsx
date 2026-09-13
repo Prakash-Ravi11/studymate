@@ -6,9 +6,10 @@ import { UploadCloud, X, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react
 import { uploadToStorage } from '@/lib/upload';
 import { registerResource } from '@/lib/actions/resources';
 import { buildResourcePath, resourceTypeFor, validateFile } from '@/lib/files';
-import { createClient } from '@/lib/supabase/client';
+import { getClientUserId } from '@/lib/supabase/client';
 import { useToast } from '@/components/ui/toast';
 import { cn, formatBytes } from '@/lib/utils';
+import { runAction } from '@/lib/actions/run';
 
 type Job = {
   id: string;
@@ -40,11 +41,8 @@ export function Uploader({
       const list = Array.from(files);
       if (list.length === 0) return;
 
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
+      const userId = await getClientUserId();
+      if (!userId) {
         toast('Your session expired. Sign in again.', 'error');
         return;
       }
@@ -72,7 +70,7 @@ export function Uploader({
       for (const job of accepted) {
         update(job.id, { status: 'uploading' });
 
-        const path = buildResourcePath(user.id, target || null, job.file.name);
+        const path = buildResourcePath(userId, target || null, job.file.name);
         const uploaded = await uploadToStorage('resources', path, job.file, (p) =>
           update(job.id, { percent: p.percent }),
         );
@@ -84,7 +82,7 @@ export function Uploader({
 
         update(job.id, { status: 'saving', percent: 100 });
 
-        const registered = await registerResource({
+        const registered = await runAction(() => registerResource({
           title: job.file.name.replace(/\.[^.]+$/, ''),
           filePath: path,
           fileName: job.file.name,
@@ -92,7 +90,7 @@ export function Uploader({
           mimeType: job.file.type || 'application/octet-stream',
           resourceType: resourceTypeFor(job.file.type, job.file.name),
           subjectId: target || null,
-        });
+        }));
 
         if (!registered.ok) {
           update(job.id, { status: 'error', error: registered.error });

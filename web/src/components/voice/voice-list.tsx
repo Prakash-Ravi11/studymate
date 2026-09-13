@@ -4,7 +4,6 @@ import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { Mic, Trash2, Loader2, FileText, Sparkles, AlertCircle } from 'lucide-react';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ConfirmModal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
@@ -13,6 +12,7 @@ import { deleteVoiceNote, getVoiceNoteUrl, transcribeVoiceNote } from '@/lib/act
 import { relativeTime } from '@/lib/dates';
 import { formatDuration } from '@/lib/utils';
 import type { VoiceNote } from '@/lib/supabase/database.types';
+import { runAction } from '@/lib/actions/run';
 
 type Item = Pick<
   VoiceNote,
@@ -28,7 +28,7 @@ function TranscriptBlock({ item, canTranscribe }: { item: Item; canTranscribe: b
 
   async function run() {
     setRunning(true);
-    const result = await transcribeVoiceNote(item.id);
+    const result = await runAction(() => transcribeVoiceNote(item.id));
     setRunning(false);
     if (!result.ok) return toast(result.error, 'error');
     toast('Transcript ready', 'success');
@@ -123,7 +123,7 @@ function VoiceRow({ item, canTranscribe }: { item: Item; canTranscribe: boolean 
   async function load() {
     if (url) return;
     setLoading(true);
-    const result = await getVoiceNoteUrl(item.id);
+    const result = await runAction(() => getVoiceNoteUrl(item.id));
     setLoading(false);
     if (!result.ok) return toast(result.error, 'error');
     setUrl(result.data.url);
@@ -131,7 +131,7 @@ function VoiceRow({ item, canTranscribe }: { item: Item; canTranscribe: boolean 
 
   async function remove() {
     setDeleting(true);
-    const result = await deleteVoiceNote(item.id);
+    const result = await runAction(() => deleteVoiceNote(item.id));
     setDeleting(false);
     if (!result.ok) return toast(result.error, 'error');
     toast('Recording deleted', 'success');

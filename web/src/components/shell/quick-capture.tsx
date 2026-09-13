@@ -12,6 +12,7 @@ import { VoiceRecorder } from '@/components/voice/recorder';
 import { createNote } from '@/lib/actions/notes';
 import { createLinkResource } from '@/lib/actions/resources';
 import { cn } from '@/lib/utils';
+import { runAction } from '@/lib/actions/run';
 
 type Mode = 'task' | 'voice' | 'link';
 
@@ -45,13 +46,9 @@ export function QuickCapture({
   const [creatingNote, setCreatingNote] = React.useState(false);
   const [linkPending, setLinkPending] = React.useState(false);
 
-  React.useEffect(() => {
-    if (open) setMode('task');
-  }, [open]);
-
   async function newNote() {
     setCreatingNote(true);
-    const result = await createNote({ noteType: 'class' });
+    const result = await runAction(() => createNote({ noteType: 'class' }));
     setCreatingNote(false);
     if (!result.ok) return toast(result.error, 'error');
     onClose();
@@ -62,11 +59,11 @@ export function QuickCapture({
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     setLinkPending(true);
-    const result = await createLinkResource({
+    const result = await runAction(() => createLinkResource({
       title: String(form.get('title') ?? ''),
       url: String(form.get('url') ?? ''),
       subjectId: String(form.get('subject_id') ?? '') || null,
-    });
+    }));
     setLinkPending(false);
     if (!result.ok) return toast(result.error, 'error');
     toast('Link saved', 'success');

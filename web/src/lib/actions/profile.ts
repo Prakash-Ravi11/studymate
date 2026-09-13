@@ -1,9 +1,8 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
-import { requireUser } from '@/lib/data/guards';
-import type { ActionResult } from './tasks';
+import { createClient, getCurrentUser } from '@/lib/supabase/server';
+import { SESSION_EXPIRED, type ActionResult } from './result';
 
 export async function updateProfile(patch: {
   fullName?: string;
@@ -13,7 +12,8 @@ export async function updateProfile(patch: {
   semester?: number | null;
   timezone?: string;
 }): Promise<ActionResult> {
-  const user = await requireUser();
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: SESSION_EXPIRED };
 
   if (patch.semester != null && (patch.semester < 1 || patch.semester > 20)) {
     return { ok: false, error: 'Semester should be between 1 and 20.' };
@@ -51,7 +51,8 @@ export async function updateNotificationPrefs(patch: {
   dailySummary?: boolean;
   dailySummaryAt?: string;
 }): Promise<ActionResult> {
-  const user = await requireUser();
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: SESSION_EXPIRED };
   const supabase = await createClient();
 
   const { error } = await supabase
@@ -83,7 +84,8 @@ export async function updateNotificationPrefs(patch: {
  * encoded into a JSON blob helps nobody.
  */
 export async function exportMyData(): Promise<ActionResult<{ json: string }>> {
-  const user = await requireUser();
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: SESSION_EXPIRED };
   const supabase = await createClient();
 
   const [profile, subjects, tasks, notes, resources, voice, reminders] = await Promise.all([

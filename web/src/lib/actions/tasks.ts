@@ -1,11 +1,11 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
-import { requireUser } from '@/lib/data/guards';
+import { createClient, getCurrentUser } from '@/lib/supabase/server';
 import type { TablesUpdate, TaskPriority, TaskStatus } from '@/lib/supabase/database.types';
+import { SESSION_EXPIRED, type ActionResult } from './result';
+import { logActivity } from './activity';
 
-export type ActionResult<T = void> = { ok: true; data: T } | { ok: false; error: string };
 
 /** Paths whose cached output depends on task state. */
 function revalidateTaskViews(subjectId?: string | null) {
@@ -29,7 +29,8 @@ export async function createTask(input: {
   /** Minutes relative to due_at; negative means before. */
   reminderOffsetMinutes?: number | null;
 }): Promise<ActionResult<{ id: string }>> {
-  const user = await requireUser();
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: SESSION_EXPIRED };
   const title = input.title.trim();
 
   if (!title) return { ok: false, error: 'Give the task a title.' };
@@ -82,7 +83,7 @@ export async function createTask(input: {
     }
   }
 
-  await supabase.from('activity').insert({
+  await logActivity(supabase, {
     user_id: user.id,
     kind: 'created',
     entity_type: 'task',
@@ -99,7 +100,8 @@ export async function setTaskStatus(
   taskId: string,
   status: TaskStatus,
 ): Promise<ActionResult> {
-  const user = await requireUser();
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: SESSION_EXPIRED };
   const supabase = await createClient();
 
   // completed_at / cancelled_at are maintained by a database trigger, so they
@@ -117,7 +119,7 @@ export async function setTaskStatus(
   }
 
   if (status === 'completed') {
-    await supabase.from('activity').insert({
+    await logActivity(supabase, {
       user_id: user.id,
       kind: 'completed',
       entity_type: 'task',
@@ -150,7 +152,7 @@ export async function updateTask(
     tags?: string[];
   },
 ): Promise<ActionResult> {
-  await requireUser();
+  if (!(await getCurrentUser())) return { ok: false, error: SESSION_EXPIRED };
   const supabase = await createClient();
 
   // Typed against the table so a stray key is a compile error, not a 400.
@@ -193,7 +195,8 @@ export async function updateTask(
 }
 
 export async function deleteTask(taskId: string): Promise<ActionResult> {
-  const user = await requireUser();
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: SESSION_EXPIRED };
   const supabase = await createClient();
 
   // Read first so the activity entry can keep a title after the row is gone.
@@ -211,7 +214,7 @@ export async function deleteTask(taskId: string): Promise<ActionResult> {
   }
 
   if (existing) {
-    await supabase.from('activity').insert({
+    await logActivity(supabase, {
       user_id: user.id,
       kind: 'deleted',
       entity_type: 'task',

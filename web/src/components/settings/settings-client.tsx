@@ -12,6 +12,7 @@ import { updateProfile, updateNotificationPrefs, exportMyData } from '@/lib/acti
 import { signOut } from '@/lib/actions/auth';
 import { cn } from '@/lib/utils';
 import type { Profile } from '@/lib/supabase/database.types';
+import { runAction } from '@/lib/actions/run';
 
 function Section({
   title,
@@ -96,13 +97,13 @@ export function SettingsClient({ profile, email }: { profile: Profile; email: st
     const yr = String(form.get('year') ?? '').trim();
 
     setSavingProfile(true);
-    const result = await updateProfile({
+    const result = await runAction(() => updateProfile({
       fullName: String(form.get('full_name') ?? ''),
       institution: String(form.get('institution') ?? ''),
       course: String(form.get('course') ?? ''),
       semester: sem ? Number(sem) : null,
       year: yr ? Number(yr) : null,
-    });
+    }));
     setSavingProfile(false);
 
     if (!result.ok) return toast(result.error, 'error');
@@ -114,11 +115,11 @@ export function SettingsClient({ profile, email }: { profile: Profile; email: st
     const previous = prefs;
     setPrefs((p) => ({ ...p, [key]: value }));
 
-    const result = await updateNotificationPrefs({
+    const result = await runAction(() => updateNotificationPrefs({
       ...(key === 'task' && { taskReminders: value }),
       ...(key === 'deadline' && { deadlineReminders: value }),
       ...(key === 'summary' && { dailySummary: value }),
-    });
+    }));
 
     if (!result.ok) {
       setPrefs(previous);
@@ -128,7 +129,7 @@ export function SettingsClient({ profile, email }: { profile: Profile; email: st
 
   async function adoptBrowserZone() {
     if (!browserZone) return;
-    const result = await updateProfile({ timezone: browserZone });
+    const result = await runAction(() => updateProfile({ timezone: browserZone }));
     if (!result.ok) return toast(result.error, 'error');
     toast(`Timezone set to ${browserZone}`, 'success');
     router.refresh();
@@ -136,7 +137,7 @@ export function SettingsClient({ profile, email }: { profile: Profile; email: st
 
   async function runExport() {
     setExporting(true);
-    const result = await exportMyData();
+    const result = await runAction(() => exportMyData());
     setExporting(false);
     if (!result.ok) return toast(result.error, 'error');
 

@@ -1,10 +1,10 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
-import { requireUser } from '@/lib/data/guards';
-import type { ActionResult } from './tasks';
+import { createClient, getCurrentUser } from '@/lib/supabase/server';
+import { SESSION_EXPIRED, type ActionResult } from './result';
 import type { ResourceType } from '@/lib/supabase/database.types';
+import { logActivity } from './activity';
 
 const BUCKET = 'resources';
 
@@ -33,7 +33,8 @@ export async function registerResource(input: {
   description?: string | null;
   tags?: string[];
 }): Promise<ActionResult<{ id: string }>> {
-  const user = await requireUser();
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: SESSION_EXPIRED };
   const supabase = await createClient();
 
   // The path must sit inside this user's own tree. Storage RLS enforces this
@@ -74,7 +75,7 @@ export async function registerResource(input: {
     return { ok: false, error: 'Could not save that file. Please try again.' };
   }
 
-  await supabase.from('activity').insert({
+  await logActivity(supabase, {
     user_id: user.id,
     kind: 'uploaded',
     entity_type: 'resource',
@@ -94,7 +95,8 @@ export async function createLinkResource(input: {
   description?: string | null;
   tags?: string[];
 }): Promise<ActionResult<{ id: string }>> {
-  const user = await requireUser();
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: SESSION_EXPIRED };
 
   const url = input.url.trim();
   if (!/^https?:\/\/.+/i.test(url)) {
@@ -130,7 +132,7 @@ export async function updateResource(
   id: string,
   patch: { title?: string; description?: string | null; subjectId?: string | null; tags?: string[] },
 ): Promise<ActionResult> {
-  await requireUser();
+  if (!(await getCurrentUser())) return { ok: false, error: SESSION_EXPIRED };
 
   if (patch.title !== undefined && !patch.title.trim()) {
     return { ok: false, error: 'Give the file a name.' };
@@ -167,7 +169,8 @@ export async function updateResource(
  * the library whose file 404s when opened.
  */
 export async function deleteResource(id: string): Promise<ActionResult> {
-  const user = await requireUser();
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: SESSION_EXPIRED };
   const supabase = await createClient();
 
   const { data: existing, error: readError } = await supabase
@@ -196,7 +199,7 @@ export async function deleteResource(id: string): Promise<ActionResult> {
     }
   }
 
-  await supabase.from('activity').insert({
+  await logActivity(supabase, {
     user_id: user.id,
     kind: 'deleted',
     entity_type: 'resource',
@@ -220,7 +223,7 @@ export async function getResourceUrl(
   id: string,
   { download = false }: { download?: boolean } = {},
 ): Promise<ActionResult<{ url: string }>> {
-  await requireUser();
+  if (!(await getCurrentUser())) return { ok: false, error: SESSION_EXPIRED };
   const supabase = await createClient();
 
   const { data: resource, error } = await supabase

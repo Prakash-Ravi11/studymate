@@ -4,6 +4,7 @@ import * as React from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useIsClient } from '@/lib/use-client-value';
 
 /**
  * Accessible modal dialog.
@@ -35,11 +36,20 @@ export function Modal({
 }) {
   const panelRef = React.useRef<HTMLDivElement>(null);
   const restoreFocusTo = React.useRef<HTMLElement | null>(null);
-  const [mounted, setMounted] = React.useState(false);
+  const isClient = useIsClient();
   const titleId = React.useId();
   const descId = React.useId();
 
-  React.useEffect(() => setMounted(true), []);
+  // Held in a ref so the effect below depends only on `open`. Every caller
+  // passes onClose as an inline arrow, so its identity changes on each parent
+  // render; with it in the dependency list, an unrelated re-render tore the
+  // effect down and rebuilt it -- and the teardown pulls focus back to the
+  // trigger and releases the scroll lock. Typing in a dialog while anything
+  // above it re-rendered meant losing the caret mid-word.
+  const onCloseRef = React.useRef(onClose);
+  React.useEffect(() => {
+    onCloseRef.current = onClose;
+  });
 
   React.useEffect(() => {
     if (!open) return;
@@ -62,7 +72,7 @@ export function Modal({
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key !== 'Tab') return;
@@ -87,9 +97,9 @@ export function Modal({
       document.body.style.overflow = previousOverflow;
       restoreFocusTo.current?.focus?.();
     };
-  }, [open, onClose]);
+  }, [open]);
 
-  if (!mounted || !open) return null;
+  if (!isClient || !open) return null;
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">

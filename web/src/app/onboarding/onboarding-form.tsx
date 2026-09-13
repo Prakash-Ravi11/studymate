@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useState, useEffect } from 'react';
+import { useActionState, useState } from 'react';
 import { AlertCircle } from 'lucide-react';
 import {
   completeOnboarding,
@@ -11,24 +11,25 @@ import { SUBJECT_COLORS } from '@/lib/constants';
 import { Field, Input } from '@/components/ui/field';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useClientValue } from '@/lib/use-client-value';
 
 const INITIAL: OnboardingState = { error: null };
 
 export function OnboardingForm() {
   const [state, formAction, pending] = useActionState(completeOnboarding, INITIAL);
   const [color, setColor] = useState<string>(SUBJECT_COLORS[0]);
-  const [timezone, setTimezone] = useState('UTC');
-
   // The browser is the only place that knows the student's zone. Reminders are
   // stored in UTC but scheduled against this, so "tomorrow morning" means
-  // theirs, not the server's.
-  useEffect(() => {
+  // theirs, not the server's. Read as a client value rather than set from an
+  // effect, so the hidden input carries the real zone on the very first render
+  // -- submitting fast used to be able to post 'UTC'.
+  const timezone = useClientValue(() => {
     try {
-      setTimezone(Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
     } catch {
-      setTimezone('UTC');
+      return 'UTC';
     }
-  }, []);
+  }, 'UTC');
 
   return (
     <form action={formAction} className="mt-7 space-y-5" noValidate>

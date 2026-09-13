@@ -9,6 +9,7 @@ import { createPortal } from 'react-dom';
 import { searchEverything } from '@/lib/actions/search';
 import type { SearchHit } from '@/lib/supabase/database.types';
 import { cn } from '@/lib/utils';
+import { useIsClient } from '@/lib/use-client-value';
 
 const ENTITY_META: Record<string, { icon: typeof BookOpen; label: string; href: (id: string) => string }> = {
   subject: { icon: BookOpen, label: 'Subject', href: (id) => `/subjects/${id}` },
@@ -21,53 +22,59 @@ const ENTITY_META: Record<string, { icon: typeof BookOpen; label: string; href: 
 export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   const router = useRouter();
   const [query, setQuery] = React.useState('');
-  const [hits, setHits] = React.useState<SearchHit[]>([]);
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
+  // One piece of state for the whole search, tagged with the query it answers.
+  // Previously hits, loading and error were three separate setStates that had to
+  // be kept in step; tagging lets everything below be derived, so a stale reply
+  // can never paint over a newer query's results.
+  const [answer, setAnswer] = React.useState<{
+    query: string;
+    hits: SearchHit[];
+    error: string | null;
+  } | null>(null);
   const [cursor, setCursor] = React.useState(0);
-  const [mounted, setMounted] = React.useState(false);
+  const isClient = useIsClient();
   const inputRef = React.useRef<HTMLInputElement>(null);
   const listId = React.useId();
 
-  React.useEffect(() => setMounted(true), []);
-
+  // Mounted per open by the shell, so there is nothing to reset -- just take
+  // focus once the input exists.
   React.useEffect(() => {
-    if (open) {
-      setQuery('');
-      setHits([]);
-      setError(null);
-      setCursor(0);
-      window.requestAnimationFrame(() => inputRef.current?.focus());
-    }
-  }, [open]);
+    window.requestAnimationFrame(() => inputRef.current?.focus());
+  }, []);
+
+  const q = query.trim();
+  const tooShort = q.length < 2;
 
   // Debounced so typing "mathematics" issues one query, not eleven.
   React.useEffect(() => {
-    if (!open) return;
-    const q = query.trim();
-    if (q.length < 2) {
-      setHits([]);
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
+    if (tooShort) return;
     let cancelled = false;
     const timer = window.setTimeout(async () => {
       const result = await searchEverything(q);
       // A slow earlier request must not overwrite a newer one's results.
       if (cancelled) return;
-      setHits(result.hits);
-      setError(result.error);
-      setCursor(0);
-      setLoading(false);
+      setAnswer({ query: q, hits: result.hits, error: result.error });
     }, 220);
 
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [query, open]);
+  }, [q, tooShort]);
+
+  // Everything the list renders falls out of "does the answer match what is
+  // typed right now".
+  const current = !tooShort && answer?.query === q ? answer : null;
+  const hits = current?.hits ?? [];
+  const error = current?.error ?? null;
+  const loading = !tooShort && current === null;
+
+  // Move the highlight back to the top when the results change underneath it.
+  const [cursorFor, setCursorFor] = React.useState(q);
+  if (cursorFor !== q) {
+    setCursorFor(q);
+    setCursor(0);
+  }
 
   const go = React.useCallback(
     (hit: SearchHit) => {
@@ -95,7 +102,7 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
     }
   };
 
-  if (!mounted || !open) return null;
+  if (!isClient || !open) return null;
 
   return createPortal(
     <div className="fixed inset-0 z-[90] flex items-start justify-center px-4 pt-[10vh]">
@@ -131,13 +138,13 @@ export function CommandPalette({ open, onClose }: { open: boolean; onClose: () =
         <div id={listId} role="listbox" aria-label="Search results" className="max-h-80 overflow-y-auto p-1.5">
           {error && <p className="px-3 py-8 text-center text-xs text-danger">{error}</p>}
 
-          {!error && query.trim().length < 2 && (
+          {!error && tooShort && (
             <p className="px-3 py-8 text-center text-xs text-content-tertiary">
               Type at least two characters to search.
             </p>
           )}
 
-          {!error && query.trim().length >= 2 && !loading && hits.length === 0 && (
+          {!error && !tooShort && !loading && hits.length === 0 && (
             <div className="px-3 py-8 text-center">
               <p className="text-xs font-medium text-content">No matches for “{query.trim()}”</p>
               <p className="mt-1 text-2xs text-content-tertiary">

@@ -1,11 +1,11 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
-import { requireUser } from '@/lib/data/guards';
+import { createClient, getCurrentUser } from '@/lib/supabase/server';
 import { sanitizeNoteHtml } from '@/lib/sanitize';
-import type { ActionResult } from './tasks';
+import { SESSION_EXPIRED, type ActionResult } from './result';
 import type { NoteType } from '@/lib/supabase/database.types';
+import { logActivity } from './activity';
 
 export async function createNote(input: {
   title?: string;
@@ -14,7 +14,8 @@ export async function createNote(input: {
   subjectId?: string | null;
   tags?: string[];
 }): Promise<ActionResult<{ id: string }>> {
-  const user = await requireUser();
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: SESSION_EXPIRED };
   const supabase = await createClient();
 
   const { data, error } = await supabase
@@ -35,7 +36,7 @@ export async function createNote(input: {
     return { ok: false, error: 'Could not create that note.' };
   }
 
-  await supabase.from('activity').insert({
+  await logActivity(supabase, {
     user_id: user.id,
     kind: 'created',
     entity_type: 'note',
@@ -67,7 +68,7 @@ export async function saveNote(
     isFavorite?: boolean;
   },
 ): Promise<ActionResult<{ updatedAt: string }>> {
-  await requireUser();
+  if (!(await getCurrentUser())) return { ok: false, error: SESSION_EXPIRED };
   const supabase = await createClient();
 
   const { data, error } = await supabase
@@ -97,7 +98,7 @@ export async function saveNote(
 }
 
 export async function setNoteArchived(id: string, archived: boolean): Promise<ActionResult> {
-  await requireUser();
+  if (!(await getCurrentUser())) return { ok: false, error: SESSION_EXPIRED };
   const supabase = await createClient();
   const { error } = await supabase
     .from('notes')
@@ -113,7 +114,8 @@ export async function setNoteArchived(id: string, archived: boolean): Promise<Ac
 }
 
 export async function deleteNote(id: string): Promise<ActionResult> {
-  const user = await requireUser();
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: SESSION_EXPIRED };
   const supabase = await createClient();
 
   const { data: existing } = await supabase
@@ -130,7 +132,7 @@ export async function deleteNote(id: string): Promise<ActionResult> {
   }
 
   if (existing) {
-    await supabase.from('activity').insert({
+    await logActivity(supabase, {
       user_id: user.id,
       kind: 'deleted',
       entity_type: 'note',

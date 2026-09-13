@@ -20,7 +20,14 @@ export function MobileNav() {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = React.useState(false);
 
-  React.useEffect(() => setMoreOpen(false), [pathname]);
+  // Close the sheet when the route changes, including on a back gesture.
+  // Adjusting during render rather than in an effect means the sheet is already
+  // gone in the same commit as the new page, with no frame showing both.
+  const [navPath, setNavPath] = React.useState(pathname);
+  if (navPath !== pathname) {
+    setNavPath(pathname);
+    setMoreOpen(false);
+  }
 
   return (
     <>

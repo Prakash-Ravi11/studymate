@@ -15,6 +15,7 @@ import { useToast } from '@/components/ui/toast';
 import { formatDue, relativeTime } from '@/lib/dates';
 import { cn } from '@/lib/utils';
 import type { DueReminder } from '@/lib/data/reminders';
+import { runAction } from '@/lib/actions/run';
 
 /** How often an open tab re-checks for reminders that have come due. */
 const POLL_MS = 60_000;
@@ -101,7 +102,7 @@ export function NotificationBell({
     // Removed from the list first: the student has acted, and waiting on a
     // round trip to reflect that reads as an unresponsive UI.
     setReminders((r) => r.filter((x) => x.id !== id));
-    const result = await dismissReminder(id);
+    const result = await runAction(() => dismissReminder(id));
     setBusy(null);
     if (!result.ok) {
       toast(result.error, 'error');
@@ -115,7 +116,7 @@ export function NotificationBell({
     setBusy(id);
     setSnoozing(null);
     setReminders((r) => r.filter((x) => x.id !== id));
-    const result = await snoozeReminder(id, minutes);
+    const result = await runAction(() => snoozeReminder(id, minutes));
     setBusy(null);
     if (!result.ok) {
       toast(result.error, 'error');
@@ -130,7 +131,7 @@ export function NotificationBell({
   async function onDismissAll() {
     const previous = reminders;
     setReminders([]);
-    const result = await dismissAllReminders();
+    const result = await runAction(() => dismissAllReminders());
     if (!result.ok) {
       toast(result.error, 'error');
       setReminders(previous);

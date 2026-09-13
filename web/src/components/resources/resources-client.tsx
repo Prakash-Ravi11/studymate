@@ -14,9 +14,10 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { deleteResource, getResourceUrl, updateResource } from '@/lib/actions/resources';
 import { relativeTime } from '@/lib/dates';
-import { cn, formatBytes } from '@/lib/utils';
+import { formatBytes } from '@/lib/utils';
 import type { ResourceListItem } from '@/lib/data/resources';
 import type { ResourceType } from '@/lib/supabase/database.types';
+import { runAction } from '@/lib/actions/run';
 
 const ICONS: Record<ResourceType, typeof FileText> = {
   pdf: FileText,
@@ -40,26 +41,33 @@ function PreviewModal({
   resource,
   onClose,
 }: {
-  resource: ResourceListItem | null;
+  resource: ResourceListItem;
   onClose: () => void;
 }) {
   const toast = useToast();
   const [url, setUrl] = React.useState<string | null>(null);
-  const [loading, setLoading] = React.useState(false);
+  const [failed, setFailed] = React.useState(false);
 
+  // Held in refs so this effect depends only on the resource id. Both are
+  // recreated on every render of the parent list, and with them in the
+  // dependency list the modal re-requested a fresh signed URL each time
+  // anything above it re-rendered.
+  const toastRef = React.useRef(toast);
+  const onCloseRef = React.useRef(onClose);
   React.useEffect(() => {
-    if (!resource) {
-      setUrl(null);
-      return;
-    }
+    toastRef.current = toast;
+    onCloseRef.current = onClose;
+  });
+
+  const resourceId = resource.id;
+  React.useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    void getResourceUrl(resource.id).then((result) => {
+    void runAction(() => getResourceUrl(resourceId)).then((result) => {
       if (cancelled) return;
-      setLoading(false);
       if (!result.ok) {
-        toast(result.error, 'error');
-        onClose();
+        setFailed(true);
+        toastRef.current(result.error, 'error');
+        onCloseRef.current();
         return;
       }
       setUrl(result.data.url);
@@ -67,9 +75,10 @@ function PreviewModal({
     return () => {
       cancelled = true;
     };
-  }, [resource, toast, onClose]);
+  }, [resourceId]);
 
-  if (!resource) return null;
+  // Derived rather than a second piece of state that has to be kept in step.
+  const loading = url === null && !failed;
 
   return (
     <Modal open onClose={onClose} title={resource.title} size="lg">
@@ -97,13 +106,11 @@ function PreviewModal({
 
 function ResourceCard({
   resource,
-  subjects,
   onPreview,
   onEdit,
   onDelete,
 }: {
   resource: ResourceListItem;
-  subjects: { id: string; name: string; color: string }[];
   onPreview: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -125,7 +132,7 @@ function ResourceCard({
 
   async function open(download: boolean) {
     setBusy(true);
-    const result = await getResourceUrl(resource.id, { download });
+    const result = await runAction(() => getResourceUrl(resource.id, { download }));
     setBusy(false);
     if (!result.ok) return toast(result.error, 'error');
     window.open(result.data.url, '_blank', 'noopener,noreferrer');
@@ -257,11 +264,11 @@ function EditModal({
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     setPending(true);
-    const result = await updateResource(resource!.id, {
+    const result = await runAction(() => updateResource(resource!.id, {
       title: String(form.get('title') ?? ''),
       description: String(form.get('description') ?? ''),
       subjectId: String(form.get('subject_id') ?? '') || null,
-    });
+    }));
     setPending(false);
     if (!result.ok) return toast(result.error, 'error');
     toast('File updated', 'success');
@@ -322,7 +329,7 @@ export function ResourcesGrid({
   async function confirmDelete() {
     if (!deleting) return;
     setDeletePending(true);
-    const result = await deleteResource(deleting.id);
+    const result = await runAction(() => deleteResource(deleting.id));
     setDeletePending(false);
     if (!result.ok) return toast(result.error, 'error');
     toast(`${deleting.title} deleted`, 'success');
@@ -348,7 +355,6 @@ export function ResourcesGrid({
           <ResourceCard
             key={r.id}
             resource={r}
-            subjects={subjects}
             onPreview={() => setPreview(r)}
             onEdit={() => setEditing(r)}
             onDelete={() => setDeleting(r)}
@@ -356,7 +362,12 @@ export function ResourcesGrid({
         ))}
       </div>
 
-      <PreviewModal resource={preview} onClose={() => setPreview(null)} />
+      {/* Keyed per resource so opening a different file mounts a fresh modal:
+          the signed URL is fetched once, on mount, instead of on every render
+          of this list. */}
+      {preview && (
+        <PreviewModal key={preview.id} resource={preview} onClose={() => setPreview(null)} />
+      )}
       <EditModal resource={editing} subjects={subjects} onClose={() => setEditing(null)} />
       <ConfirmModal
         open={Boolean(deleting)}

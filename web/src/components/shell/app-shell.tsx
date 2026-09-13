@@ -94,13 +94,17 @@ export function AppShell({
       </button>
 
       <MobileNav />
-      <CommandPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
-      <QuickCapture
-        open={captureOpen}
-        onClose={() => setCaptureOpen(false)}
-        subjects={subjects}
-        timezone={timezone}
-      />
+      {searchOpen && <CommandPalette open onClose={() => setSearchOpen(false)} />}
+      {/* Mounted per open so the sheet always starts on the Task tab without
+          an effect resetting it after the first paint. */}
+      {captureOpen && (
+        <QuickCapture
+          open
+          onClose={() => setCaptureOpen(false)}
+          subjects={subjects}
+          timezone={timezone}
+        />
+      )}
     </div>
   );
 }

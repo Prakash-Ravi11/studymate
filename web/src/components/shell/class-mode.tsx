@@ -10,6 +10,7 @@ import { createNote } from '@/lib/actions/notes';
 import { useToast } from '@/components/ui/toast';
 import { Select } from '@/components/ui/field';
 import { cn } from '@/lib/utils';
+import { runAction } from '@/lib/actions/run';
 
 type Panel = null | 'voice' | 'task';
 
@@ -35,7 +36,7 @@ export function ClassMode({
 
   async function newNote() {
     setCreatingNote(true);
-    const result = await createNote({ noteType: 'class', subjectId: subjectId || null });
+    const result = await runAction(() => createNote({ noteType: 'class', subjectId: subjectId || null }));
     setCreatingNote(false);
     if (!result.ok) return toast(result.error, 'error');
     router.push(`/notes/${result.data.id}`);

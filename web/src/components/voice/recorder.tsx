@@ -5,12 +5,14 @@ import { useRouter } from 'next/navigation';
 import { Mic, Square, Pause, Play, Trash2, Loader2, MicOff, AlertCircle } from 'lucide-react';
 import { uploadToStorage } from '@/lib/upload';
 import { registerVoiceNote, transcribeVoiceNote } from '@/lib/actions/voice';
-import { createClient } from '@/lib/supabase/client';
+import { getClientUserId } from '@/lib/supabase/client';
 import { safeFileName } from '@/lib/files';
 import { useToast } from '@/components/ui/toast';
 import { Input, Select } from '@/components/ui/field';
 import { Button } from '@/components/ui/button';
 import { cn, formatDuration } from '@/lib/utils';
+import { runAction } from '@/lib/actions/run';
+import { useClientValue } from '@/lib/use-client-value';
 
 type Phase = 'idle' | 'requesting' | 'recording' | 'paused' | 'review' | 'saving';
 
@@ -34,7 +36,6 @@ export function VoiceRecorder({
   const toast = useToast();
 
   const [phase, setPhase] = React.useState<Phase>('idle');
-  const [supported, setSupported] = React.useState<boolean | 'insecure' | null>(null);
   const [permissionError, setPermissionError] = React.useState<string | null>(null);
   const [elapsed, setElapsed] = React.useState(0);
   const [blob, setBlob] = React.useState<Blob | null>(null);
@@ -56,18 +57,14 @@ export function VoiceRecorder({
   // context. That is the usual cause when testing on a phone over a LAN address
   // like http://192.168.1.5:3000, and telling someone their browser is too old
   // would send them debugging entirely the wrong thing.
-  React.useEffect(() => {
-    if (typeof window !== 'undefined' && !window.isSecureContext) {
-      setSupported('insecure');
-      return;
-    }
-    const ok =
-      typeof navigator !== 'undefined' &&
+  const supported = useClientValue<boolean | 'insecure'>(() => {
+    if (!window.isSecureContext) return 'insecure';
+    return (
       Boolean(navigator.mediaDevices?.getUserMedia) &&
       typeof MediaRecorder !== 'undefined' &&
-      pickMimeType() !== null;
-    setSupported(ok);
-  }, []);
+      pickMimeType() !== null
+    );
+  }, true);
 
   const stopTicker = () => {
     if (ticker.current) window.clearInterval(ticker.current);
@@ -96,7 +93,10 @@ export function VoiceRecorder({
 
     const type = pickMimeType();
     if (!type) {
-      setSupported(false);
+      // `supported` already rules this out, so reaching here means the browser
+      // changed its mind between render and click. Say so rather than dropping
+      // back to idle, which looks like the button simply did nothing.
+      setPermissionError('This browser cannot record in any format StudyMate supports.');
       setPhase('idle');
       return;
     }
@@ -176,18 +176,15 @@ export function VoiceRecorder({
     if (!blob) return;
     setPhase('saving');
 
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) {
+    const userId = await getClientUserId();
+    if (!userId) {
       setPhase('review');
       return toast('Your session expired. Sign in again.', 'error');
     }
 
     const extension = mimeType.current.includes('mp4') ? 'm4a' : mimeType.current.includes('ogg') ? 'ogg' : 'webm';
     const fileName = safeFileName(`${title.trim() || 'voice-note'}.${extension}`);
-    const path = `users/${user.id}/voice/${crypto.randomUUID()}-${fileName}`;
+    const path = `users/${userId}/voice/${crypto.randomUUID()}-${fileName}`;
 
     const file = new File([blob], fileName, { type: blob.type });
     const uploaded = await uploadToStorage('voice-notes', path, file);
@@ -199,7 +196,7 @@ export function VoiceRecorder({
       return toast(`${uploaded.error} Your recording has not been lost — try saving again.`, 'error');
     }
 
-    const registered = await registerVoiceNote({
+    const registered = await runAction(() => registerVoiceNote({
       filePath: path,
       fileName,
       fileSize: file.size,
@@ -207,7 +204,7 @@ export function VoiceRecorder({
       durationMs: elapsed,
       title: title.trim() || 'Voice note',
       subjectId: subjectId || null,
-    });
+    }));
 
     if (!registered.ok) {
       setPhase('review');
@@ -276,7 +273,7 @@ export function VoiceRecorder({
         <div className="text-center">
           <button
             onClick={start}
-            disabled={phase === 'requesting' || supported === null}
+            disabled={phase === 'requesting'}
             aria-label="Start recording"
             className="mx-auto grid size-16 place-items-center rounded-full bg-danger text-white transition-transform hover:scale-105 disabled:opacity-50"
           >

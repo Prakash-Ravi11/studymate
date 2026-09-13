@@ -31,48 +31,84 @@ var d=s==='dark'||(s==='system'&&window.matchMedia('(prefers-color-scheme:dark)'
 document.documentElement.classList.toggle('dark',d);
 }catch(e){}})();`;
 
-function systemTheme(): 'light' | 'dark' {
-  if (typeof window === 'undefined') return 'light';
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+/** Same-tab theme writes, since the native 'storage' event only fires cross-tab. */
+const THEME_CHANGE_EVENT = 'studymate-theme-change';
+
+function subscribeToStoredTheme(onChange: () => void) {
+  window.addEventListener('storage', onChange);
+  window.addEventListener(THEME_CHANGE_EVENT, onChange);
+  return () => {
+    window.removeEventListener('storage', onChange);
+    window.removeEventListener(THEME_CHANGE_EVENT, onChange);
+  };
 }
 
+/** The stored preference, or 'system' when nothing is stored or storage is blocked. */
+function readStoredTheme(): Theme {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw === 'light' || raw === 'dark' || raw === 'system' ? raw : 'system';
+  } catch {
+    // Private mode or blocked storage: follow the OS.
+    return 'system';
+  }
+}
+
+const darkQuery = () => window.matchMedia('(prefers-color-scheme: dark)');
+
+function subscribeToSystemTheme(onChange: () => void) {
+  const mq = darkQuery();
+  mq.addEventListener('change', onChange);
+  return () => mq.removeEventListener('change', onChange);
+}
+
+/**
+ * Theme state, derived rather than stored.
+ *
+ * Both inputs -- what is in localStorage and what the OS currently prefers --
+ * are things only the browser knows, so both are read through
+ * useSyncExternalStore. That is what it is for: React takes the server snapshot
+ * while rendering on the server and the client snapshot once hydrating, so the
+ * value is right on the first client render.
+ *
+ * The previous version held these in state and filled them in from effects,
+ * which meant one render with the wrong theme before the correct one, and a
+ * `resolved` value that could drift out of step with `theme` because two
+ * setters had to agree.
+ */
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = React.useState<Theme>('system');
-  const [resolved, setResolved] = React.useState<'light' | 'dark'>('light');
+  const stored = React.useSyncExternalStore(
+    subscribeToStoredTheme,
+    readStoredTheme,
+    () => 'system' as Theme,
+  );
 
-  // Read the stored preference after mount. Doing this in useState's initialiser
-  // would run on the server, where localStorage does not exist.
-  React.useEffect(() => {
-    let stored: Theme = 'system';
-    try {
-      stored = (localStorage.getItem(STORAGE_KEY) as Theme) ?? 'system';
-    } catch {
-      // Private mode or blocked storage: fall back to following the OS.
-    }
-    setThemeState(stored);
-    setResolved(stored === 'system' ? systemTheme() : stored);
-  }, []);
+  // A change made this session wins over what was stored, so the UI responds
+  // immediately without waiting for a storage round trip.
+  const [override, setOverride] = React.useState<Theme | null>(null);
+  const theme = override ?? stored;
 
-  // Keep following the OS while the user is on "system".
-  React.useEffect(() => {
-    if (theme !== 'system') return;
-    const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const onChange = () => setResolved(mq.matches ? 'dark' : 'light');
-    mq.addEventListener('change', onChange);
-    return () => mq.removeEventListener('change', onChange);
-  }, [theme]);
+  const systemIsDark = React.useSyncExternalStore(
+    subscribeToSystemTheme,
+    () => darkQuery().matches,
+    () => false,
+  );
+
+  const resolved: 'light' | 'dark' =
+    theme === 'system' ? (systemIsDark ? 'dark' : 'light') : theme;
 
   React.useEffect(() => {
     document.documentElement.classList.toggle('dark', resolved === 'dark');
   }, [resolved]);
 
   const setTheme = React.useCallback((next: Theme) => {
-    setThemeState(next);
-    setResolved(next === 'system' ? systemTheme() : next);
+    setOverride(next);
     try {
       localStorage.setItem(STORAGE_KEY, next);
+      // Same-tab writes do not fire 'storage', so tell our own subscribers.
+      window.dispatchEvent(new Event(THEME_CHANGE_EVENT));
     } catch {
-      // Preference simply will not persist; the app still works this session.
+      // Preference will not persist; the app still works this session.
     }
   }, []);
 

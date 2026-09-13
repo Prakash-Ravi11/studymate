@@ -1,9 +1,9 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { createClient } from '@/lib/supabase/server';
-import { requireUser } from '@/lib/data/guards';
-import type { ActionResult } from './tasks';
+import { createClient, getCurrentUser } from '@/lib/supabase/server';
+import { SESSION_EXPIRED, type ActionResult } from './result';
+import { logActivity } from './activity';
 
 const HEX = /^#[0-9A-Fa-f]{6}$/;
 
@@ -22,7 +22,8 @@ export async function createSubject(input: {
   color: string;
   semester?: number | null;
 }): Promise<ActionResult<{ id: string }>> {
-  const user = await requireUser();
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: SESSION_EXPIRED };
   const invalid = validate(input.name, input.color);
   if (invalid) return { ok: false, error: invalid };
 
@@ -50,7 +51,7 @@ export async function createSubject(input: {
     return { ok: false, error: 'Could not create that subject. Please try again.' };
   }
 
-  await supabase.from('activity').insert({
+  await logActivity(supabase, {
     user_id: user.id,
     kind: 'created',
     entity_type: 'subject',
@@ -75,7 +76,7 @@ export async function updateSubject(
     semester?: number | null;
   },
 ): Promise<ActionResult> {
-  await requireUser();
+  if (!(await getCurrentUser())) return { ok: false, error: SESSION_EXPIRED };
 
   if (patch.name !== undefined || patch.color !== undefined) {
     const invalid = validate(patch.name ?? 'x', patch.color ?? '#000000');
@@ -120,7 +121,8 @@ export async function updateSubject(
  * tidied away would be unforgivable; the UI says so before confirming.
  */
 export async function deleteSubject(id: string): Promise<ActionResult> {
-  const user = await requireUser();
+  const user = await getCurrentUser();
+  if (!user) return { ok: false, error: SESSION_EXPIRED };
   const supabase = await createClient();
 
   const { data: existing } = await supabase
@@ -137,7 +139,7 @@ export async function deleteSubject(id: string): Promise<ActionResult> {
   }
 
   if (existing) {
-    await supabase.from('activity').insert({
+    await logActivity(supabase, {
       user_id: user.id,
       kind: 'deleted',
       entity_type: 'subject',
@@ -153,7 +155,7 @@ export async function deleteSubject(id: string): Promise<ActionResult> {
 }
 
 export async function setSubjectArchived(id: string, archived: boolean): Promise<ActionResult> {
-  await requireUser();
+  if (!(await getCurrentUser())) return { ok: false, error: SESSION_EXPIRED };
   const supabase = await createClient();
   const { error } = await supabase
     .from('subjects')

@@ -13,6 +13,7 @@ import { relativeTime } from '@/lib/dates';
 import { cn } from '@/lib/utils';
 import type { NoteListItem } from '@/lib/data/notes';
 import type { NoteType } from '@/lib/supabase/database.types';
+import { runAction } from '@/lib/actions/run';
 
 const TYPE_LABEL: Record<NoteType, string> = {
   quick: 'Quick',
@@ -38,7 +39,7 @@ export function NewNoteButton({
 
   async function create() {
     setPending(true);
-    const result = await createNote({ subjectId: subjectId ?? null, noteType });
+    const result = await runAction(() => createNote({ subjectId: subjectId ?? null, noteType }));
     setPending(false);
     if (!result.ok) return toast(result.error, 'error');
     // Straight into the editor: a new note with nothing in it is not a

@@ -7,6 +7,7 @@ import { Field, Input, Textarea } from '@/components/ui/field';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/toast';
 import { createSubject, updateSubject } from '@/lib/actions/subjects';
+import { runAction } from '@/lib/actions/run';
 import { SUBJECT_COLORS } from '@/lib/constants';
 import { cn } from '@/lib/utils';
 import type { SubjectOverview } from '@/lib/supabase/database.types';
@@ -27,14 +28,6 @@ export function SubjectForm({
   const [error, setError] = React.useState<string | null>(null);
   const [color, setColor] = React.useState<string>(subject?.color ?? SUBJECT_COLORS[0]);
 
-  // Re-sync when the dialog is reopened for a different subject.
-  React.useEffect(() => {
-    if (open) {
-      setColor(subject?.color ?? SUBJECT_COLORS[0]);
-      setError(null);
-    }
-  }, [open, subject]);
-
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
@@ -51,9 +44,11 @@ export function SubjectForm({
 
     setPending(true);
     setError(null);
+    // runAction always resolves, so `pending` always clears -- a rejected or
+    // stalled action used to leave this button spinning with no way back.
     const result = subject
-      ? await updateSubject(subject.id, input)
-      : await createSubject(input);
+      ? await runAction(() => updateSubject(subject.id, input))
+      : await runAction(() => createSubject(input));
     setPending(false);
 
     if (!result.ok) {

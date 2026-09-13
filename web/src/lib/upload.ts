@@ -20,11 +20,21 @@ export async function uploadToStorage(
   signal?: AbortSignal,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const supabase = createClient();
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
 
-  if (!session) return { ok: false, error: 'Your session expired. Sign in again and retry.' };
+  let token: string | undefined;
+  try {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    token = session?.access_token;
+  } catch (cause) {
+    // A rejected lookup must not throw out of here: the caller marks a job
+    // 'uploading' before calling, and an exception would strand that row on a
+    // progress bar that never moves.
+    console.error('getSession() threw before upload:', cause);
+  }
+
+  if (!token) return { ok: false, error: 'Your session expired. Sign in again and retry.' };
 
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const url = `${base}/storage/v1/object/${bucket}/${path}`;
@@ -32,7 +42,7 @@ export async function uploadToStorage(
   return new Promise((resolve) => {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', url, true);
-    xhr.setRequestHeader('Authorization', `Bearer ${session.access_token}`);
+    xhr.setRequestHeader('Authorization', `Bearer ${token}`);
     xhr.setRequestHeader('x-upsert', 'false');
     if (file.type) xhr.setRequestHeader('Content-Type', file.type);
 
@@ -62,6 +72,14 @@ export async function uploadToStorage(
     xhr.onerror = () =>
       resolve({ ok: false, error: 'Upload failed — check your connection and try again.' });
     xhr.onabort = () => resolve({ ok: false, error: 'Upload cancelled.' });
+
+    // Without this an XHR whose connection dies mid-transfer never fires any
+    // handler, so the promise never settles and the progress bar sits at
+    // whatever percent it reached. Generous, because a big PDF on campus wifi
+    // is legitimately slow -- this is for a dead connection, not a slow one.
+    xhr.timeout = 5 * 60_000;
+    xhr.ontimeout = () =>
+      resolve({ ok: false, error: 'Upload timed out. Check your connection and try again.' });
 
     signal?.addEventListener('abort', () => xhr.abort(), { once: true });
 

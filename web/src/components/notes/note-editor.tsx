@@ -9,12 +9,13 @@ import { Trash2, Pin, Star, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { EditorToolbar } from './editor-toolbar';
 import { SaveStatus, type SaveState } from './save-status';
-import { Input, Select } from '@/components/ui/field';
+import { Select } from '@/components/ui/field';
 import { ConfirmModal } from '@/components/ui/modal';
 import { useToast } from '@/components/ui/toast';
 import { saveNote, deleteNote } from '@/lib/actions/notes';
 import { cn } from '@/lib/utils';
 import type { Note, NoteType } from '@/lib/supabase/database.types';
+import { runAction } from '@/lib/actions/run';
 
 const NOTE_TYPES: { value: NoteType; label: string }[] = [
   { value: 'quick', label: 'Quick note' },
@@ -80,12 +81,12 @@ export function NoteEditor({
     setState('saving');
     const payload = latest.current;
 
-    const result = await saveNote(note.id, {
+    const result = await runAction(() => saveNote(note.id, {
       title: payload.title,
       content: payload.content,
       noteType: payload.noteType,
       subjectId: payload.subjectId || null,
-    });
+    }));
 
     if (!result.ok) {
       // Keep the text on this device so a failed save never loses work
@@ -139,6 +140,12 @@ export function NoteEditor({
         toast('Recovered unsaved changes from this device.', 'info');
         editor?.commands.setContent(draft.content);
         latest.current.content = draft.content;
+        // Genuinely imperative and one-shot: a recovered draft *is* unsaved
+        // work, and that can only be known after the editor instance exists and
+        // localStorage has been read. There is no declarative form of "a side
+        // effect happened, so this document is now dirty", so the rule is
+        // suppressed here rather than the code contorted to satisfy it.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setState('dirty');
       }
     } catch {
@@ -175,8 +182,8 @@ export function NoteEditor({
     if (kind === 'pin') setPinned(next);
     else setFavorite(next);
 
-    const result = await saveNote(note.id,
-      kind === 'pin' ? { isPinned: next } : { isFavorite: next });
+    const result = await runAction(() => saveNote(note.id,
+      kind === 'pin' ? { isPinned: next } : { isFavorite: next }));
 
     if (!result.ok) {
       if (kind === 'pin') setPinned(!next);
@@ -187,7 +194,7 @@ export function NoteEditor({
 
   async function onDelete() {
     setDeleting(true);
-    const result = await deleteNote(note.id);
+    const result = await runAction(() => deleteNote(note.id));
     setDeleting(false);
     if (!result.ok) return toast(result.error, 'error');
     try {

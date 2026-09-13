@@ -51,8 +51,19 @@ export const createClient = cache(async () => {
  * single request that made it.
  */
 export const getCurrentUser = cache(async () => {
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.getUser();
-  if (error) return null;
-  return data.user;
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase.auth.getUser();
+    if (error) return null;
+    return data.user;
+  } catch (cause) {
+    // getUser() does a real HTTP call, so it can reject rather than return an
+    // error -- a DNS blip or a dropped connection to the Auth server. Letting
+    // that propagate out of a Server Action rejects the promise the browser is
+    // awaiting, and any caller that sets a `pending` flag before the call never
+    // clears it: the button spins forever. Treat an unreachable Auth server the
+    // same as "not signed in" and let the caller decide what to say.
+    console.error('getUser() threw:', cause);
+    return null;
+  }
 });
