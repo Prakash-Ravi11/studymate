@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient, getCurrentUser } from '@/lib/supabase/server';
 import type { TablesUpdate, TaskPriority, TaskStatus } from '@/lib/supabase/database.types';
-import { SESSION_EXPIRED, type ActionResult } from './result';
+import { SESSION_EXPIRED, dbFailure, type ActionResult } from './result';
 import { logActivity } from './activity';
 
 
@@ -59,7 +59,7 @@ export async function createTask(input: {
 
   if (error) {
     console.error('createTask failed:', error.message);
-    return { ok: false, error: 'Could not save that task. Please try again.' };
+    return dbFailure('save that task', error.message);
   }
 
   if (input.reminderOffsetMinutes != null && input.dueAt) {

@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient, getCurrentUser } from '@/lib/supabase/server';
-import { SESSION_EXPIRED, type ActionResult } from './result';
+import { SESSION_EXPIRED, dbFailure, type ActionResult } from './result';
 import { logActivity } from './activity';
 
 const HEX = /^#[0-9A-Fa-f]{6}$/;
@@ -48,7 +48,7 @@ export async function createSubject(input: {
       return { ok: false, error: 'You already have a subject with that code.' };
     }
     console.error('createSubject failed:', error.message);
-    return { ok: false, error: 'Could not create that subject. Please try again.' };
+    return dbFailure('create that subject', error.message);
   }
 
   await logActivity(supabase, {

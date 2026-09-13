@@ -1,5 +1,6 @@
 import { cache } from 'react';
 import { cookies } from 'next/headers';
+import { unstable_rethrow } from 'next/navigation';
 import { createServerClient } from '@supabase/ssr';
 import { env } from '@/lib/env';
 import type { Database } from './database.types';
@@ -57,12 +58,17 @@ export const getCurrentUser = cache(async () => {
     if (error) return null;
     return data.user;
   } catch (cause) {
-    // getUser() does a real HTTP call, so it can reject rather than return an
-    // error -- a DNS blip or a dropped connection to the Auth server. Letting
-    // that propagate out of a Server Action rejects the promise the browser is
-    // awaiting, and any caller that sets a `pending` flag before the call never
-    // clears it: the button spins forever. Treat an unreachable Auth server the
-    // same as "not signed in" and let the caller decide what to say.
+    // Next signals control flow by throwing: redirect(), notFound(), and -- the
+    // one that bites here -- cookies() marking the route dynamic. Those are the
+    // framework's to handle, and swallowing them breaks it silently. This must
+    // come first in every catch on the server.
+    unstable_rethrow(cause);
+
+    // What is left is a genuine failure. getUser() does a real HTTP call, so it
+    // can reject rather than return an error -- a DNS blip or a dropped
+    // connection to the Auth server. Letting that propagate out of a Server
+    // Action rejects the promise the browser is awaiting, and any caller that
+    // set a `pending` flag before the call never clears it.
     console.error('getUser() threw:', cause);
     return null;
   }

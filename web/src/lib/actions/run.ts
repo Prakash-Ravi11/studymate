@@ -1,3 +1,4 @@
+import { unstable_isUnrecognizedActionError, unstable_rethrow } from 'next/navigation';
 import type { ActionResult } from './result';
 
 /**
@@ -9,6 +10,28 @@ import type { ActionResult } from './result';
  * bound, that request's promise simply never settles.
  */
 const TIMEOUT_MS = 20_000;
+
+/**
+ * Turn a thrown value into something worth putting on screen.
+ *
+ * "Something went wrong" is useless to the one person using this app -- it hides
+ * the one fact that would explain the failure. This is a private tool, so the
+ * real message is shown rather than swallowed; the stack stays in the console.
+ */
+function describe(cause: unknown): string {
+  const message =
+    cause instanceof Error ? cause.message : typeof cause === 'string' ? cause : '';
+
+  // Next replaces server-side messages with a digest in production, so an
+  // opaque one means "look at the function logs", not "no information".
+  const digest =
+    typeof cause === 'object' && cause !== null && 'digest' in cause
+      ? String((cause as { digest: unknown }).digest)
+      : null;
+
+  if (!message && !digest) return 'Something went wrong. Please try again.';
+  return `Failed: ${message || 'server error'}${digest ? ` (ref ${digest})` : ''}`;
+}
 
 /**
  * Call a server action so that it always answers.
@@ -43,8 +66,25 @@ export async function runAction<T>(
       }),
     ]);
   } catch (cause) {
+    // A redirect relayed back from the server is the router's to act on.
+    unstable_rethrow(cause);
+
+    // The page's JavaScript is older than the server it is talking to, so the
+    // action id it posted no longer exists. Every deploy invalidates the ids,
+    // and a tab left open across one keeps posting the old ones -- the request
+    // is rejected before the action body runs, which is why nothing reaches the
+    // database and nothing appears in its logs. Only a reload fixes it, so say
+    // that plainly instead of offering "try again", which cannot work.
+    if (unstable_isUnrecognizedActionError(cause)) {
+      console.error('Stale client bundle -- action id not recognised by the server.', cause);
+      return {
+        ok: false,
+        error: 'StudyMate was updated since this page loaded. Reload the page, then try again.',
+      };
+    }
+
     console.error('Server action failed:', cause);
-    return { ok: false, error: 'Something went wrong. Please try again.' };
+    return { ok: false, error: describe(cause) };
   } finally {
     clearTimeout(timer);
   }

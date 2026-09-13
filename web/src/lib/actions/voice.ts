@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { createClient, getCurrentUser } from '@/lib/supabase/server';
 import { transcribeAudio, isTranscriptionEnabled } from '@/lib/transcription';
-import { SESSION_EXPIRED, type ActionResult } from './result';
+import { SESSION_EXPIRED, dbFailure, type ActionResult } from './result';
 import { logActivity } from './activity';
 
 const BUCKET = 'voice-notes';
@@ -59,7 +59,7 @@ export async function registerVoiceNote(input: {
   if (error) {
     console.error('registerVoiceNote failed, removing orphaned object:', error.message);
     await supabase.storage.from(BUCKET).remove([input.filePath]);
-    return { ok: false, error: 'Could not save that recording. Please try again.' };
+    return dbFailure('save that recording', error.message);
   }
 
   await logActivity(supabase, {

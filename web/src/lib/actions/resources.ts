@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient, getCurrentUser } from '@/lib/supabase/server';
-import { SESSION_EXPIRED, type ActionResult } from './result';
+import { SESSION_EXPIRED, dbFailure, type ActionResult } from './result';
 import type { ResourceType } from '@/lib/supabase/database.types';
 import { logActivity } from './activity';
 
@@ -72,7 +72,7 @@ export async function registerResource(input: {
         error: 'The file uploaded but could not be saved to your library. Please try again.',
       };
     }
-    return { ok: false, error: 'Could not save that file. Please try again.' };
+    return dbFailure('save that file', error.message);
   }
 
   await logActivity(supabase, {
@@ -243,7 +243,7 @@ export async function getResourceUrl(
 
   if (signError || !signed) {
     console.error('createSignedUrl failed:', signError?.message);
-    return { ok: false, error: 'Could not open that file. Please try again.' };
+    return dbFailure('open that file', signError?.message);
   }
 
   return { ok: true, data: { url: signed.signedUrl } };

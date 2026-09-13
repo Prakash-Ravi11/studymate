@@ -1,3 +1,4 @@
+import { unstable_rethrow } from 'next/navigation';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database, TablesInsert } from '@/lib/supabase/database.types';
 
@@ -26,6 +27,7 @@ export async function logActivity(
       console.error(`activity log failed (${row.kind} ${row.entity_type}):`, error.message);
     }
   } catch (cause) {
+    unstable_rethrow(cause);
     console.error(`activity log threw (${row.kind} ${row.entity_type}):`, cause);
   }
 }
