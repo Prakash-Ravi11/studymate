@@ -1,0 +1,299 @@
+@import 'tailwindcss';
+
+/*
+ * StudyMate design system
+ * ---------------------------------------------------------------------------
+ * One token layer, two themes. Components never reference a raw hex value or a
+ * Tailwind palette shade directly -- they use the semantic tokens below, so a
+ * palette change is a one-file change and dark mode can never drift.
+ *
+ * The hue family (indigo -> violet -> cyan) carries over from the original
+ * StudyMate mobile app so the product keeps its identity; the surfaces are
+ * re-tuned for long reading sessions: a warm off-white rather than pure white,
+ * and a deep desaturated slate rather than pure black.
+ *
+ * Dark mode is class-based, not media-query-based, so the user's explicit
+ * choice can be persisted and can override the OS setting.
+ */
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  /* Brand ------------------------------------------------------------- */
+  --sm-primary: #4f46e5;
+  --sm-primary-hover: #4338ca;
+  --sm-primary-subtle: #eef2ff;
+  --sm-primary-contrast: #ffffff;
+  --sm-accent: #0891b2;
+  --sm-accent-subtle: #ecfeff;
+
+  /* Status ------------------------------------------------------------ */
+  --sm-success: #059669;
+  --sm-success-subtle: #ecfdf5;
+  --sm-warning: #d97706;
+  --sm-warning-subtle: #fffbeb;
+  --sm-danger: #dc2626;
+  --sm-danger-subtle: #fef2f2;
+
+  /* Surfaces ---------------------------------------------------------- */
+  --sm-canvas: #f8f8f7;
+  --sm-surface: #ffffff;
+  --sm-surface-raised: #ffffff;
+  --sm-surface-sunken: #f1f1ef;
+  --sm-overlay: rgb(15 23 42 / 0.4);
+
+  /* Text -------------------------------------------------------------- */
+  --sm-text: #18181b;
+  --sm-text-secondary: #52525b;
+  --sm-text-tertiary: #8b8b94;
+  --sm-text-inverse: #fafafa;
+
+  /* Lines ------------------------------------------------------------- */
+  --sm-border: #e6e6e3;
+  --sm-border-strong: #d2d2ce;
+  --sm-ring: #4f46e5;
+
+  /* Elevation --------------------------------------------------------- */
+  --sm-shadow-xs: 0 1px 2px 0 rgb(24 24 27 / 0.05);
+  --sm-shadow-sm: 0 1px 3px 0 rgb(24 24 27 / 0.07), 0 1px 2px -1px rgb(24 24 27 / 0.04);
+  --sm-shadow-md: 0 4px 12px -2px rgb(24 24 27 / 0.08), 0 2px 6px -2px rgb(24 24 27 / 0.05);
+  --sm-shadow-lg: 0 12px 32px -8px rgb(24 24 27 / 0.14), 0 4px 12px -4px rgb(24 24 27 / 0.06);
+}
+
+.dark {
+  --sm-primary: #818cf8;
+  --sm-primary-hover: #a5b4fc;
+  --sm-primary-subtle: #1e1b4b;
+  --sm-primary-contrast: #10101c;
+  --sm-accent: #22d3ee;
+  --sm-accent-subtle: #083344;
+
+  --sm-success: #34d399;
+  --sm-success-subtle: #052e26;
+  --sm-warning: #fbbf24;
+  --sm-warning-subtle: #3a2606;
+  --sm-danger: #f87171;
+  --sm-danger-subtle: #3d1414;
+
+  --sm-canvas: #0b0f19;
+  --sm-surface: #131825;
+  --sm-surface-raised: #1a2031;
+  --sm-surface-sunken: #080b13;
+  --sm-overlay: rgb(2 4 10 / 0.65);
+
+  --sm-text: #f2f3f7;
+  --sm-text-secondary: #a8adbd;
+  --sm-text-tertiary: #71778a;
+  --sm-text-inverse: #10101c;
+
+  --sm-border: #252c3d;
+  --sm-border-strong: #353d52;
+  --sm-ring: #818cf8;
+
+  /* Shadows read as noise on dark surfaces; elevation comes from the
+     lighter --sm-surface-raised instead, with only a faint depth cue. */
+  --sm-shadow-xs: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --sm-shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.4);
+  --sm-shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.45);
+  --sm-shadow-lg: 0 12px 32px -8px rgb(0 0 0 / 0.6);
+}
+
+@theme inline {
+  --color-primary: var(--sm-primary);
+  --color-primary-hover: var(--sm-primary-hover);
+  --color-primary-subtle: var(--sm-primary-subtle);
+  --color-primary-contrast: var(--sm-primary-contrast);
+  --color-accent: var(--sm-accent);
+  --color-accent-subtle: var(--sm-accent-subtle);
+
+  --color-success: var(--sm-success);
+  --color-success-subtle: var(--sm-success-subtle);
+  --color-warning: var(--sm-warning);
+  --color-warning-subtle: var(--sm-warning-subtle);
+  --color-danger: var(--sm-danger);
+  --color-danger-subtle: var(--sm-danger-subtle);
+
+  --color-canvas: var(--sm-canvas);
+  --color-surface: var(--sm-surface);
+  --color-surface-raised: var(--sm-surface-raised);
+  --color-surface-sunken: var(--sm-surface-sunken);
+
+  --color-content: var(--sm-text);
+  --color-content-secondary: var(--sm-text-secondary);
+  --color-content-tertiary: var(--sm-text-tertiary);
+  --color-content-inverse: var(--sm-text-inverse);
+
+  --color-line: var(--sm-border);
+  --color-line-strong: var(--sm-border-strong);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+
+  /* Type scale. Deliberately short -- more sizes than this and pages stop
+     looking like one product. */
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.125rem;
+  --text-sm: 0.8125rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base: 0.9375rem;
+  --text-base--line-height: 1.5rem;
+  --text-lg: 1.0625rem;
+  --text-lg--line-height: 1.625rem;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.75rem;
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: 2rem;
+  --text-3xl: 1.875rem;
+  --text-3xl--line-height: 2.25rem;
+
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+
+  --shadow-xs: var(--sm-shadow-xs);
+  --shadow-sm: var(--sm-shadow-sm);
+  --shadow-md: var(--sm-shadow-md);
+  --shadow-lg: var(--sm-shadow-lg);
+}
+
+@layer base {
+  * {
+    border-color: var(--sm-border);
+  }
+
+  html {
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--sm-canvas);
+    color: var(--sm-text);
+    font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Visible focus is a requirement, not a decoration (section 36). Bound to
+     :focus-visible so it appears for keyboard users without ringing every
+     mouse click. */
+  :focus-visible {
+    outline: 2px solid var(--sm-ring);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  ::selection {
+    background-color: var(--sm-primary);
+    color: var(--sm-primary-contrast);
+  }
+
+  /* Honour the OS "reduce motion" setting everywhere at once, so no individual
+     component has to remember to (section 31). */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /* Skip link: first tab stop on every page. */
+  .skip-link {
+    position: absolute;
+    left: -9999px;
+    z-index: 999;
+  }
+  .skip-link:focus {
+    left: 1rem;
+    top: 1rem;
+    padding: 0.5rem 1rem;
+    background-color: var(--sm-surface);
+    border: 1px solid var(--sm-border-strong);
+    border-radius: var(--radius-md);
+    box-shadow: var(--sm-shadow-md);
+  }
+
+  /* Shared skeleton shimmer for loading states (section 33). */
+  .sm-skeleton {
+    background-color: var(--sm-surface-sunken);
+    background-image: linear-gradient(
+      90deg,
+      transparent,
+      color-mix(in srgb, var(--sm-border) 60%, transparent),
+      transparent
+    );
+    background-size: 200% 100%;
+    animation: sm-shimmer 1.4s ease-in-out infinite;
+  }
+
+  @keyframes sm-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  /* Rich-text output from the note editor. Tiptap emits plain semantic HTML;
+     these rules give it typography without pulling in a prose plugin. */
+  .sm-prose :where(h1) { font-size: var(--text-2xl); font-weight: 650; margin: 1.25rem 0 0.5rem; }
+  .sm-prose :where(h2) { font-size: var(--text-xl); font-weight: 650; margin: 1.125rem 0 0.5rem; }
+  .sm-prose :where(h3) { font-size: var(--text-lg); font-weight: 600; margin: 1rem 0 0.375rem; }
+  .sm-prose :where(p) { margin: 0.5rem 0; }
+  .sm-prose :where(ul) { list-style: disc; padding-left: 1.25rem; margin: 0.5rem 0; }
+  .sm-prose :where(ol) { list-style: decimal; padding-left: 1.25rem; margin: 0.5rem 0; }
+  .sm-prose :where(li) { margin: 0.125rem 0; }
+  .sm-prose :where(blockquote) {
+    border-left: 3px solid var(--sm-border-strong);
+    padding-left: 0.875rem;
+    color: var(--sm-text-secondary);
+    margin: 0.75rem 0;
+  }
+  .sm-prose :where(code) {
+    font-family: var(--font-mono), monospace;
+    font-size: 0.875em;
+    background-color: var(--sm-surface-sunken);
+    padding: 0.125rem 0.3rem;
+    border-radius: var(--radius-sm);
+  }
+  .sm-prose :where(pre) {
+    background-color: var(--sm-surface-sunken);
+    padding: 0.875rem;
+    border-radius: var(--radius-md);
+    overflow-x: auto;
+    margin: 0.75rem 0;
+  }
+  .sm-prose :where(pre code) { background: none; padding: 0; }
+  .sm-prose :where(a) { color: var(--sm-primary); text-decoration: underline; }
+  .sm-prose :where(strong) { font-weight: 650; }
+
+  /* Tiptap placeholder */
+  .sm-prose :where(p.is-editor-empty:first-child)::before {
+    content: attr(data-placeholder);
+    color: var(--sm-text-tertiary);
+    float: left;
+    height: 0;
+    pointer-events: none;
+  }
+}
+
+@keyframes sm-toast-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes sm-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sm-panel-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.99); }
+  to   { opacity: 1; transform: none; }
+}
